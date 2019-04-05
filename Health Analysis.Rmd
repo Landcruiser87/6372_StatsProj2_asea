@@ -1,0 +1,41 @@
+---
+title: "Health Analysis"
+author: "asea"
+date: "April 4, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(Hmisc)
+```
+
+The national dataset used in this study comes from the 2017 County Health Rankings website. Since each state and county have varying populations, we chose to use the data as a percent of the population. The death rate is the age-adjusted Years of Potential Life Lost rate per 100,000.
+
+```{r EDA Start}
+# import health data
+data = read.csv("./Data/CHR_Data.csv")
+
+# show data summary to identify variables with missing data
+summary(data)
+
+# impute variables with their medians, prefer medians in the event there is any skew
+data$Premature_Death_Rate <- with(data,impute(Premature_Death_Rate,median))
+data$Unemployed <- with(data,impute(Unemployed,median))
+data$Uninsured <- with(data,impute(Uninsured,median))
+data$Graduation_Rate <- with(data,impute(Graduation_Rate))
+
+# scatter matrices
+pairs(data[,4:12])        # personal physical conditions
+pairs(data[,c(4,13:18)])  # education, living
+pairs(data[,c(4,19:24)])  # race, language
+```
+
+Get Variance Stats
+```{r Variance}
+data2 <- data[,4:24]
+cov(data2)
+sum(diag(cov(data2))) # total variance
+```
+
