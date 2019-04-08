@@ -103,6 +103,7 @@ ggplot(data = pc.scores, aes(x = PC2, y = PC3)) +
 ```
 
 ```{r LDA}
+#LDA run with all variables except obesity rating
 library(MASS)
 ldadat <- data
 ldadat <- ldadat[,4:26] #Takeout id and location data
