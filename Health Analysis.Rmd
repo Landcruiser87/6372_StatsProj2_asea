@@ -74,7 +74,7 @@ sum(diag(cov(data2[2:14]))) # total variance
 For PCA,the variables are all in percentage form (without dividing by 100). This normalization reduces/eliminates the scale sensitivity seen with PCA preventing bias from variables with different scales.
 ```{r PCA}
 
-# removing race variables
+# let's continue removing race variables
 data2_norace <- data2[,1:14]
 
 # PCA
@@ -175,7 +175,7 @@ ggplot(data = pc.scores, aes(x = PC1, y = PC13)) +
     ggtitle("PCA plot of Health Data")
 ```
 
-```{r}
+```{r Steve's LDA}
 samplesize=nrow(data2_norace)
 train_percent = .75
 train_indices = sample(seq(1,samplesize,length = samplesize),train_percent*samplesize) # get random indices
@@ -187,10 +187,16 @@ qda_1 <- lda(Obese_Class~.,data = train)
 
 #confusion matrix
 prd<-predict(lda_1, newdata = test)$class
-table(prd,test$Obese_Class)
+x<-table(prd,test$Obese_Class)
+x
 
 # Overall misclassification Error rate
 (101+39)/(39+466)
+ME<-(x[2,1]+x[1,2])/(39+466)
+ME
+
+#Overall Accuracy
+1-ME
 
 #ROC
 ldaprd<-predict(lda_1, newdata = train)$posterior
