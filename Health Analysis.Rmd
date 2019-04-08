@@ -57,8 +57,8 @@ data[data$Obese < 30, "Obese_Class"] <- 0
 
 ```{r PCA}
 # PCA
-dat.x <- data[,5:24]
-dat.x <- dat.x[,-2]
+dat.x <- data[,5:17] # remove race variables
+dat.x <- dat.x[,-2]  # remove original obese variable since it's the binary explanatory variable
 dat.y <- as.factor(as.character(data[,26]))
 pc.result<-prcomp(dat.x,scale.=TRUE)
 pc.scores<-pc.result$x
@@ -74,28 +74,75 @@ pc.result$rotation
 pc.eigen<-(pc.result$sdev)^2
 pc.prop<-pc.eigen/sum(pc.eigen)
 pc.cumprop<-cumsum(pc.prop)
-plot(1:19,pc.prop,type="l",main="Scree Plot",ylim=c(0,1),xlab="PC #",ylab="Proportion of Variation")
-axis(1, seq(1,19,1))
-lines(1:19,pc.cumprop,lty=3)
+plot(1:12,pc.prop,type="l",main="Scree Plot",ylim=c(0,1),xlab="PC #",ylab="Proportion of Variation")
+axis(1, seq(1,12,1))
+lines(1:12,pc.cumprop,lty=3)
 ```
 
 ```{r Plot some Principal Components}
 
 #Use ggplot2 to plot pc's
 ggplot(data = pc.scores, aes(x = PC1, y = PC2)) +
-  geom_point(aes(col=Obese), size=1)+
-  geom_hline(yintercept = 0, colour = "gray65") +
-  geom_vline(xintercept = 0, colour = "gray65") +
-  ggtitle("PCA plot of Health Data")
-
-ggplot(data = pc.scores, aes(x = PC1, y = PC3)) +
     geom_point(aes(col=Obese), size=1)+
   geom_hline(yintercept = 0, colour = "gray65") +
     geom_vline(xintercept = 0, colour = "gray65") +
     ggtitle("PCA plot of Health Data")
 
-  
-ggplot(data = pc.scores, aes(x = PC2, y = PC3)) +
+ggplot(data = pc.scores, aes(x = PC1, y = PC3)) +
+  geom_point(aes(col=Obese), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+  geom_vline(xintercept = 0, colour = "gray65") +
+  ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC4)) +
+    geom_point(aes(col=Obese), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC5)) +
+    geom_point(aes(col=Obese), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC6)) +
+    geom_point(aes(col=Obese), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC7)) +
+    geom_point(aes(col=Obese), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC8)) +
+  geom_point(aes(col=Obese), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+  geom_vline(xintercept = 0, colour = "gray65") +
+  ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC9)) +
+    geom_point(aes(col=Obese), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC10)) +
+    geom_point(aes(col=Obese), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC11)) +
+    geom_point(aes(col=Obese), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC12)) +
     geom_point(aes(col=Obese), size=1)+
   geom_hline(yintercept = 0, colour = "gray65") +
     geom_vline(xintercept = 0, colour = "gray65") +
