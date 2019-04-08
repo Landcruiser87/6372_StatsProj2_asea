@@ -26,10 +26,20 @@ data$Unemployed <- with(data,impute(Unemployed,median))
 data$Uninsured <- with(data,impute(Uninsured,median))
 data$Graduation_Rate <- with(data,impute(Graduation_Rate))
 
+# rescale Premature_Death_Rate so min value = 2.947 vs 2947, just a preference so it's not scaled so diff from predictors
+data$Premature_Death_Rate <- data$Premature_Death_Rate/1000
+
 # scatter matrices
 pairs(data[,4:12])        # personal physical conditions
 pairs(data[,c(4,13:18)])  # education, living
 pairs(data[,c(4,19:24)])  # race, language
+
+# add non-white variable
+data$NonWhite <- 100-data$White
+
+# create Obese Binary Classification
+data$Obese_Class <- 1
+data[data$Obese < 30, "Obese_Class"] <- 0
 ```
 
 Get Variance Stats
@@ -37,5 +47,57 @@ Get Variance Stats
 data2 <- data[,4:24]
 cov(data2)
 sum(diag(cov(data2))) # total variance
+```
+
+```{r Prob1-Create Binary Classification}
+# create Obese Binary Classification
+data$Obese_Class <- 1
+data[data$Obese < 30, "Obese_Class"] <- 0
+```
+
+```{r PCA}
+# PCA
+dat.x <- data[,5:24]
+dat.x <- dat.x[,-2]
+dat.y <- as.factor(as.character(data[,26]))
+pc.result<-prcomp(dat.x,scale.=TRUE)
+pc.scores<-pc.result$x
+pc.scores<-data.frame(pc.scores)
+pc.scores$Obese<-dat.y
+
+#Loadings for interpretation
+pc.result$rotation
+```
+
+```{r Scree Plot}
+#Scree plot
+pc.eigen<-(pc.result$sdev)^2
+pc.prop<-pc.eigen/sum(pc.eigen)
+pc.cumprop<-cumsum(pc.prop)
+plot(1:19,pc.prop,type="l",main="Scree Plot",ylim=c(0,1),xlab="PC #",ylab="Proportion of Variation")
+lines(1:19,pc.cumprop,lty=3)
+```
+
+```{r Plot some Principal Components}
+
+#Use ggplot2 to plot pc's
+ggplot(data = pc.scores, aes(x = PC1, y = PC2)) +
+  geom_point(aes(col=Obese), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+  geom_vline(xintercept = 0, colour = "gray65") +
+  ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC3)) +
+    geom_point(aes(col=Obese), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+  
+ggplot(data = pc.scores, aes(x = PC2, y = PC3)) +
+    geom_point(aes(col=Obese), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
 ```
 
