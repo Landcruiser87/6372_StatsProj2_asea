@@ -75,6 +75,7 @@ pc.eigen<-(pc.result$sdev)^2
 pc.prop<-pc.eigen/sum(pc.eigen)
 pc.cumprop<-cumsum(pc.prop)
 plot(1:19,pc.prop,type="l",main="Scree Plot",ylim=c(0,1),xlab="PC #",ylab="Proportion of Variation")
+axis(1, seq(1,19,1))
 lines(1:19,pc.cumprop,lty=3)
 ```
 
