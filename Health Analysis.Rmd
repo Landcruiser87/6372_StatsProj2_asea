@@ -9,6 +9,10 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 
 library(Hmisc)
+library(gplots)
+library(ggplot2)
+library(ROCR)
+library(MASS)
 ```
 
 The national dataset used in this study comes from the 2017 County Health Rankings website. Since each state and county have varying populations, we chose to use the data as a percent of the population. The death rate is the age-adjusted Years of Potential Life Lost rate per 100,000.
@@ -29,41 +33,57 @@ data$Graduation_Rate <- with(data,impute(Graduation_Rate))
 # rescale Premature_Death_Rate so min value = 2.947 vs 2947, just a preference so it's not scaled so diff from predictors
 data$Premature_Death_Rate <- data$Premature_Death_Rate/1000
 
-# scatter matrices
-pairs(data[,4:12])        # personal physical conditions
-pairs(data[,c(4,13:18)])  # education, living
-pairs(data[,c(4,19:24)])  # race, language
+# create Obese Binary Classification
+data$Obese_Class <- 1
+data[data$Obese < 30, "Obese_Class"] <- 0
+data$Obese_Class <- as.factor(as.character(data$Obese_Class))
 
 # add non-white variable
-data$NonWhite <- 100-data$White
+data$NonWhite <- 100-data$White 
 
-# create Obese Binary Classification
-data$Obese_Class <- 1
-data[data$Obese < 30, "Obese_Class"] <- 0
+# -- create new data set with obese_class first --
+data2 <- data[,c(25,5,7:23,26,24)]
+
+# scatter matrices, with Obese at the top
+pairs(data2[,c(2:8)],col=data$Obese_Class)   # personal physical conditions
+pairs(data2[,c(9:14)],col=data$Obese_Class)  # education, living
+pairs(data2[,c(15:21)],col=data$Obese_Class) # race, language
+
+# predictor heatmap correlations
+cor1 <- cor(data2[,2:8])
+cor2 <- cor(data2[,9:14])
+cor3 <- cor(data2[,15:21])
+
+heatmap.2(cor1,col=redgreen(75), 
+          density.info="none", trace="none", dendrogram=c("both"), 
+          symm=F,symkey=T,symbreaks=T, scale="none",key=T)
+heatmap.2(cor2,col=redgreen(75), 
+          density.info="none", trace="none", dendrogram=c("both"), 
+          symm=F,symkey=T,symbreaks=T, scale="none",key=T)
+heatmap.2(cor3,col=redgreen(75), 
+          density.info="none", trace="none", dendrogram=c("both"), 
+          symm=F,symkey=T,symbreaks=T, scale="none",key=T)
 ```
 
-Get Variance Stats
+Get Variance Stats...We should rank/sort these
 ```{r Variance}
-data2 <- data[,4:24]
-cov(data2)
-sum(diag(cov(data2))) # total variance
+cov(data2[2:14]) # remove race
+sum(diag(cov(data2[2:14]))) # total variance
 ```
 
-```{r Prob1-Create Binary Classification}
-# create Obese Binary Classification
-data$Obese_Class <- 1
-data[data$Obese < 30, "Obese_Class"] <- 0
-```
-
+For PCA,the variables are all in percentage form (without dividing by 100). This normalization reduces/eliminates the scale sensitivity seen with PCA preventing bias from variables with different scales.
 ```{r PCA}
+
+# let's continue removing race variables
+data2_norace <- data2[,1:14]
+
 # PCA
-dat.x <- data[,5:24]
-dat.x <- dat.x[,-2]
-dat.y <- as.factor(as.character(data[,26]))
+dat.x <- data2_norace[,2:14]
+dat.y <- data2_norace[,1]
 pc.result<-prcomp(dat.x,scale.=TRUE)
 pc.scores<-pc.result$x
 pc.scores<-data.frame(pc.scores)
-pc.scores$Obese<-dat.y
+pc.scores$Obese_Class<-dat.y
 
 #Loadings for interpretation
 pc.result$rotation
@@ -74,32 +94,124 @@ pc.result$rotation
 pc.eigen<-(pc.result$sdev)^2
 pc.prop<-pc.eigen/sum(pc.eigen)
 pc.cumprop<-cumsum(pc.prop)
-plot(1:19,pc.prop,type="l",main="Scree Plot",ylim=c(0,1),xlab="PC #",ylab="Proportion of Variation")
-axis(1, seq(1,19,1))
-lines(1:19,pc.cumprop,lty=3)
+plot(1:13,pc.prop,type="l",main="Scree Plot",ylim=c(0,1),xlab="PC #",ylab="Proportion of Variation")
+axis(1, seq(1,13,1))
+lines(1:13,pc.cumprop,lty=3)
 ```
 
 ```{r Plot some Principal Components}
 
 #Use ggplot2 to plot pc's
 ggplot(data = pc.scores, aes(x = PC1, y = PC2)) +
-  geom_point(aes(col=Obese), size=1)+
+    geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC3)) +
+  geom_point(aes(col=Obese_Class), size=1)+
   geom_hline(yintercept = 0, colour = "gray65") +
   geom_vline(xintercept = 0, colour = "gray65") +
   ggtitle("PCA plot of Health Data")
 
-ggplot(data = pc.scores, aes(x = PC1, y = PC3)) +
-    geom_point(aes(col=Obese), size=1)+
+ggplot(data = pc.scores, aes(x = PC1, y = PC4)) +
+    geom_point(aes(col=Obese_Class), size=1)+
   geom_hline(yintercept = 0, colour = "gray65") +
     geom_vline(xintercept = 0, colour = "gray65") +
     ggtitle("PCA plot of Health Data")
 
-  
-ggplot(data = pc.scores, aes(x = PC2, y = PC3)) +
-    geom_point(aes(col=Obese), size=1)+
+ggplot(data = pc.scores, aes(x = PC1, y = PC5)) +
+    geom_point(aes(col=Obese_Class), size=1)+
   geom_hline(yintercept = 0, colour = "gray65") +
     geom_vline(xintercept = 0, colour = "gray65") +
     ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC6)) +
+    geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC7)) +
+    geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC8)) +
+  geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+  geom_vline(xintercept = 0, colour = "gray65") +
+  ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC9)) +
+    geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC10)) +
+    geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC11)) +
+    geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC12)) +
+    geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC13)) +
+    geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+```
+
+```{r Steve's LDA}
+samplesize=nrow(data2_norace)
+train_percent = .75
+train_indices = sample(seq(1,samplesize,length = samplesize),train_percent*samplesize) # get random indices
+train = data2_norace[train_indices,] # random training data 
+test = data2_norace[-train_indices,] # random test data 
+
+lda_1 <- lda(Obese_Class~.,data = train)
+qda_1 <- lda(Obese_Class~.,data = train)
+
+#confusion matrix
+prd<-predict(lda_1, newdata = test)$class
+x<-table(prd,test$Obese_Class)
+x
+
+# Overall misclassification Error rate
+(101+39)/(39+466)
+ME<-(x[2,1]+x[1,2])/(39+466)
+ME
+
+#Overall Accuracy
+1-ME
+
+#ROC
+ldaprd<-predict(lda_1, newdata = train)$posterior
+#correcting for the way lda creates predicted probabilities
+ldaprd<-ldaprd[,2]
+
+pred <- prediction(ldaprd, train$Obese_Class)
+roc.perf = performance(pred, measure = "tpr", x.measure = "fpr")
+auc.train <- performance(pred, measure = "auc")
+auc.train <- auc.train@y.values
+
+#Plot ROC
+plot(roc.perf,main="LDA")
+abline(a=0, b= 1) #Ref line indicating poor performance
+text(x = .25, y = .75,paste("AUC = ", round(auc.train[[1]],3), sep = ""))
 ```
 
 ```{r LDA}
