@@ -253,7 +253,7 @@ library(MASS)
 ldadat <- data
 ldadat <- ldadat[,4:26] #Takeout id and location data
 ldadat <- ldadat[,-3] #Remove obesity column from analysis
-ldadat$Obese_Class <-  as.factor(as.character(ldadat[,22])) #change it to a factor
+
 obeselda<-lda(Obese_Class~.,data=ldadat) # Run LDA on Obesity Categorical
 
 pred<-predict(obeselda,newdata=ldadat)$class #Yielding categorical obesity response
