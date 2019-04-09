@@ -100,6 +100,9 @@ axis(1, seq(1,13,1))
 lines(1:13,pc.cumprop,lty=3)
 ```
 
+Judging from the intial scree plot, it looks as though the third Principal component carries 90% of the variation.  The main loading coefficients for PC3 were Smoking, Diabetic, Insufficient Sleep, Uninsured, Some college and Rural housing. 
+
+
 ```{r Plot some Principal Components}
 
 #Use ggplot2 to plot pc's
