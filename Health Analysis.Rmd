@@ -100,7 +100,7 @@ axis(1, seq(1,13,1))
 lines(1:13,pc.cumprop,lty=3)
 ```
 
-Judging from the intial scree plot, it looks as though the third Principal component carries 90% of the variation.  The main loading coefficients for PC3 were Smoking, Diabetic, Insufficient Sleep, Uninsured, Some college and Rural housing. 
+Judging from the intial scree plot, it looks as though the third Principal component carries 90% of the variation.  The main loading coefficients for PC3 were Smoking, Diabetic, Insufficient Sleep, Uninsured, Some college and Rural housing. By far the largest coefficient was Uninsured (.7637) which leads us to believe insurance plays a large part in obesity.
 
 
 ```{r Plot some Principal Components}
