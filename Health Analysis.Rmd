@@ -175,31 +175,42 @@ ggplot(data = pc.scores, aes(x = PC1, y = PC13)) +
     ggtitle("PCA plot of Health Data")
 ```
 
-```{r Steve's LDA}
+```{r Steve LDA}
 samplesize=nrow(data2_norace)
 train_percent = .75
 train_indices = sample(seq(1,samplesize,length = samplesize),train_percent*samplesize) # get random indices
 train = data2_norace[train_indices,] # random training data 
 test = data2_norace[-train_indices,] # random test data 
 
-lda_1 <- lda(Obese_Class~.,data = train)
-qda_1 <- lda(Obese_Class~.,data = train)
+lda <- lda(Obese_Class~.,data = train)
+qda <- qda(Obese_Class~.,data = train)
 
-#confusion matrix
-prd<-predict(lda_1, newdata = test)$class
-x<-table(prd,test$Obese_Class)
-x
+#lda confusion matrix
+lda_prd<-predict(lda, newdata = test)$class
+lda_cm<-table(lda_prd,test$Obese_Class)
+lda_cm
 
-# Overall misclassification Error rate
-(101+39)/(39+466)
-ME<-(x[2,1]+x[1,2])/(39+466)
-ME
+#qda confusion matrix
+qda_prd<-predict(qda, newdata = test)$class
+qda_cm<-table(qda_prd,test$Obese_Class)
+qda_cm
 
-#Overall Accuracy
-1-ME
+#lda overall misclassification rrror rate
+lda_ME<-(lda_cm[2,1]+lda_cm[1,2])/(lda_cm[1,2]+lda_cm[2,2])
+lda_ME
 
-#ROC
-ldaprd<-predict(lda_1, newdata = train)$posterior
+#lda Overall Accuracy
+1-lda_ME
+
+#qda overall misclassification rrror rate
+qda_ME<-(qda_cm[2,1]+qda_cm[1,2])/(qda_cm[1,2]+qda_cm[2,2])
+qda_ME
+
+#qda Overall Accuracy
+1-qda_ME
+
+#--lda ROC--
+ldaprd<-predict(lda, newdata = train)$posterior
 #correcting for the way lda creates predicted probabilities
 ldaprd<-ldaprd[,2]
 
@@ -208,10 +219,27 @@ roc.perf = performance(pred, measure = "tpr", x.measure = "fpr")
 auc.train <- performance(pred, measure = "auc")
 auc.train <- auc.train@y.values
 
-#Plot ROC
+#Plot lda ROC
 plot(roc.perf,main="LDA")
 abline(a=0, b= 1) #Ref line indicating poor performance
 text(x = .25, y = .75,paste("AUC = ", round(auc.train[[1]],3), sep = ""))
+
+#--qda ROC--
+qdaprd<-predict(qda, newdata = train)$posterior
+#correcting for the way lda creates predicted probabilities
+qdaprd<-qdaprd[,2]
+
+pred <- prediction(qdaprd, train$Obese_Class)
+roc.perf = performance(pred, measure = "tpr", x.measure = "fpr")
+auc.train <- performance(pred, measure = "auc")
+auc.train <- auc.train@y.values
+
+#Plot lda ROC
+plot(roc.perf,main="QDA")
+abline(a=0, b= 1) #Ref line indicating poor performance
+text(x = .25, y = .75,paste("AUC = ", round(auc.train[[1]],3), sep = ""))
+
+
 ```
 
 ```{r LDA}
