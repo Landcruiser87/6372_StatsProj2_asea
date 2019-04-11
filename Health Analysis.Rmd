@@ -335,3 +335,78 @@ Obsese.full.forrest <- randomForest(Obese_Class~., data=data4, importance = TRUE
 varImpPlot(Obsese.full.forrest,type=1, main='Random Tree Variable Importance') 
 
 ```
+
+```{r trees setup}
+library(rgl)
+library(tree)
+library(ISLR)
+library(randomForest)
+```
+
+```{r trees}
+#reset dataset
+data <- read.csv("./Data/CHR_Data.csv")
+#remove the id numbers, need to remove the state and county because that doesn't work with trees
+data <- data[,-c(1:3)]
+attach(data)
+```
+
+```{r repeat adjustment of variables}
+# impute variables with their medians, prefer medians in the event there is any skew
+data$Premature_Death_Rate <- with(data,impute(Premature_Death_Rate,median)) # may use this later so imputing now
+data$Unemployed <- with(data,impute(Unemployed,median))
+data$Uninsured <- with(data,impute(Uninsured,median))
+data$Graduation_Rate <- with(data,impute(Graduation_Rate))
+
+# rescale Premature_Death_Rate so min value = 2.947 vs 2947, just a preference so it's not scaled so diff from predictors
+data$Premature_Death_Rate <- data$Premature_Death_Rate/1000
+```
+
+```{r deep tree}
+mytree <- tree(Premature_Death_Rate~., data)
+plot(mytree)
+text(mytree,pretty=0)
+```
+
+This tree shows that Frequent Physical Distress is a main split point for premature deaths.
+
+```{r}
+#cross validation tree
+set.seed(3)
+cv.adver=cv.tree(mytree,FUN=prune.tree,method="deviance")
+names(cv.adver)
+cv.adver
+plot(cv.adver)
+par(mfrow=c(1,1))
+plot(cv.adver$size,cv.adver$dev,type="b")
+```
+
+```{r}
+#compare normal regression, knn, and ols methods using MSE
+set.seed(123)
+index<-sample(1:3136,1568)
+train<-data[index,]
+test<-data[-index,]
+
+train.tree<-tree(Premature_Death_Rate~.,train)
+summary(train.tree)
+plot(train.tree)
+text(train.tree,pretty=0)
+plot(cv.tree(train.tree,FUN=prune.tree,method="deviance"))
+
+testMSE<-mean((test$Premature_Death_Rate - predict(train.tree,newdata=test) )^2)
+
+
+knn<-FNN::knn.reg(train = train[,-c(3,4)], test =test[,-c(3,4)], y = train$Premature_Death_Rate, k = 5)
+testMSE.knn<-mean( ( test$Premature_Death_Rate-knn$pred)^2)
+
+full.fit<-lm(Premature_Death_Rate~.,train)
+testMSE.ols<-mean((test$Premature_Death_Rate-predict(full.fit,test))^2)
+
+
+testMSE
+testMSE.knn
+testMSE.ols
+```
+
+The OLS method has the lowest MSE of 1.970053.
