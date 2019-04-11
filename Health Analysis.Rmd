@@ -118,7 +118,7 @@ OPEN ACTIONS:
 
 1. Discuss heat maps & covariance
 
-AH-Variance looks to be pretty good.  Some_college might be screwing it up a tad bit, but i don't think its cause for concern.  As per heatmaps, We have some correlation with Smoking/Freq Mental distress and drinking/Freq Physical Distress -   (not surprising).  Also, mental/physical stress is unsurprisingly correlated. 
+AH-Variance looks to be pretty good.  Some_college might be screwing it up a tad bit, but i don't think its cause for concern.  As per heatmaps, We have some correlation with Smoking/Freq Mental distress and drinking/Freq Physical Distress -   (not surprising).  Also, mental/physical stress is heavily correlated. 
 
 ```{r Logistic Reg Model}
 # Logistics Regression
