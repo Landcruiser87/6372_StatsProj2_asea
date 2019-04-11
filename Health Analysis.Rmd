@@ -118,12 +118,13 @@ OPEN ACTIONS:
 
 1. Discuss heat maps & covariance
 
-AH-Variance looks to be pretty good.  Some_college might be screwing it up a tad bit, but i don't think its cause for concern.  As per heatmaps, We have some correlation with Smoking/Freq Mental distress and drinking/Freq Physical Distress -   (not surprising).  Also, mental/physical stress seem to be correlated. 
+AH-Variance looks to be pretty good.  Some_college might be screwing it up a tad bit, but i don't think its cause for concern.  As per heatmaps, We have some correlation with Smoking/Freq Mental distress and drinking/Freq Physical Distress -   (not surprising).  Also, mental/physical stress is unsurprisingly correlated. 
 
 ```{r Logistic Reg Model}
 # Logistics Regression
 glm.fit <- glm(Obese_Class ~ ., data = data2, family = binomial)
 summary(glm.fit)
+
 ```
 
 ```{r}
@@ -133,6 +134,12 @@ data3 = data2[,c(1:3,5,7,9)]
 # Logistics Regression
 glm.fit <- glm(Obese_Class ~ ., data = data3, family = binomial)
 summary(glm.fit)
+#Confidence Intervals
+confint.default(glm.fit) #Wald
+confint(glm.fit) #Profile
+
+#Performance Metrics
+
 ```
 
 
@@ -184,8 +191,7 @@ OPEN ACTIONS:
 3. Add other models (KNN, RANDOM FOREST,...)
 4. Add summary comparison table
 
-Judging from the intial scree plot, it looks as though the third Principal component carries 90% of the variation.  The main loading coefficients for PC3 were Smoking, Diabetic, Insufficient Sleep, Uninsured, Some college and Rural housing. By far the largest coefficient was Uninsured (.7637) which leads us to believe insurance plays a large part in obesity.
-
+Judging from the intial scree plot, it looks as though the second Principal component carries just under 90% of the variation.  The main loading coefficients for PC2 were Physically_Inactive, Diabetic, Unemployed, and Severe_Housing_Problems. By far, the largest coefficient was Severe_Housing_Problems (-0.721) which leads us to believe that having consitent residence plays a big part in determining Obesity.
 
 ```{r Plot some Principal Components}
 
