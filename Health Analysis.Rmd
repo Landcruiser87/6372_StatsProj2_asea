@@ -101,8 +101,9 @@ heatmap.2(cor2,col=redgreen(75),
 Get Variance Stats
 
 ```{r Variance}
-cov(data2[2:11]) # remove race
+cov.mat <- cov(data2[2:11]) # remove race
 sum(diag(cov(data2[2:11]))) # total variance
+
 ```
 
 OPEN ACTIONS: 
