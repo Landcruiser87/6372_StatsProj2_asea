@@ -17,6 +17,22 @@ library(MASS)
 
 The national dataset used in this study comes from the 2017 County Health Rankings website. Since each state and county have varying populations, we chose to use the data as a percent of the population. The death rate is the age-adjusted Years of Potential Life Lost rate per 100,000.  
 
+OBJECTIVE1
+
+We want to model the probability of being obsese (BMI > 30) for a particular variable. The team has decided to use the following variables as the predictors.The variable data represent the percentage of the population for a specifc US county.
+
+- Smokers
+- Physically Incactive
+- Excesive Drinking
+- Frequent Mental Distress
+- Frequent Physical Distress
+- Diabetic
+- Insufficient Sleep
+- Uninsured
+- Some College 
+- Unemployed
+- Severe Housing Problems
+
 
 ```{r EDA Start}
 # import health data
@@ -24,36 +40,55 @@ data = read.csv("./Data/CHR_Data.csv")
 
 # show data summary to identify variables with missing data
 summary(data)
+```
 
+The summary statistics show missing values for Premature_Death_Rate, Unemployed, Uninsured, and Graduation_Rate. We will impute the missing data with the median values since some distributions show a little skew when comparing the mean and medians. We will later show the histograms.
+
+```{r EDA Impute}
 # impute variables with their medians, prefer medians in the event there is any skew
-data$Premature_Death_Rate <- with(data,impute(Premature_Death_Rate,median))
+data$Premature_Death_Rate <- with(data,impute(Premature_Death_Rate,median)) # may use this later so imputing now
 data$Unemployed <- with(data,impute(Unemployed,median))
 data$Uninsured <- with(data,impute(Uninsured,median))
 data$Graduation_Rate <- with(data,impute(Graduation_Rate))
 
 # rescale Premature_Death_Rate so min value = 2.947 vs 2947, just a preference so it's not scaled so diff from predictors
 data$Premature_Death_Rate <- data$Premature_Death_Rate/1000
+```
 
+The histograms confirm some skew with Frequent_Mental_Distress, Frequent_Physical_Distress,Uninsured, Unemployed, and Severe_Housing_Problems.
+
+```{r EDA Histograms}
+# get chosen predictors for EDA
+predictors <- data[,c(5,7:13,15:17)]
+
+# histogram of chosen predictors
+par(mfrow=c(2,6))
+for(i in 1:11) {
+    hist(predictors[,i], main=names(predictors)[i])
+}
+```
+
+OPEN ACTIONS: 
+
+1. Determine if skew is an issue. I don't think it is with our sample size.
+2. Identify any outliers and handle them if needed.
+
+```{r EDA}
 # create Obese Binary Classification
 data$Obese_Class <- 1
 data[data$Obese < 30, "Obese_Class"] <- 0
 data$Obese_Class <- as.factor(as.character(data$Obese_Class))
 
-# add non-white variable
-data$NonWhite <- 100-data$White 
-
 # -- create new data set with obese_class first --
-data2 <- data[,c(25,5,7:23,26,24)]
+data2 <- data[,c(25,5,7:13,15:17)]
 
 # scatter matrices, with Obese at the top
-pairs(data2[,c(2:8)],col=data$Obese_Class)   # personal physical conditions
-pairs(data2[,c(9:14)],col=data$Obese_Class)  # education, living
-pairs(data2[,c(15:21)],col=data$Obese_Class) # race, language
+pairs(data2[,c(2:6)],col=data$Obese_Class)
+pairs(data2[,c(7:11)],col=data$Obese_Class)
 
 # predictor heatmap correlations
-cor1 <- cor(data2[,2:8])
-cor2 <- cor(data2[,9:14])
-cor3 <- cor(data2[,15:21])
+cor1 <- cor(data2[,2:6])
+cor2 <- cor(data2[,7:11])
 
 heatmap.2(cor1,col=redgreen(75), 
           density.info="none", trace="none", dendrogram=c("both"), 
@@ -61,26 +96,57 @@ heatmap.2(cor1,col=redgreen(75),
 heatmap.2(cor2,col=redgreen(75), 
           density.info="none", trace="none", dendrogram=c("both"), 
           symm=F,symkey=T,symbreaks=T, scale="none",key=T)
-heatmap.2(cor3,col=redgreen(75), 
-          density.info="none", trace="none", dendrogram=c("both"), 
-          symm=F,symkey=T,symbreaks=T, scale="none",key=T)
 ```
 
-Get Variance Stats...We should rank/sort these
+Get Variance Stats
+
 ```{r Variance}
-cov(data2[2:14]) # remove race
-sum(diag(cov(data2[2:14]))) # total variance
+cov(data2[2:11]) # remove race
+sum(diag(cov(data2[2:11]))) # total variance
 ```
+
+OPEN ACTIONS: 
+
+1. Discuss heat maps & covariance
+
+```{r Logistic Reg Model}
+# Logistics Regression
+glm.fit <- glm(Obese_Class ~ ., data = data2, family = binomial)
+summary(glm.fit)
+```
+
+```{r}
+# reduce data set to include only significant variables
+data3 = data2[,c(1:3,5,7,9)]
+
+# Logistics Regression
+glm.fit <- glm(Obese_Class ~ ., data = data3, family = binomial)
+summary(glm.fit)
+```
+
+
+OPEN ACTIONS: 
+
+1. Create performance metrics
+2. Add CIs
+3. Explain coefficients
+4. Add hypothesis
+5. Comment on practical vs statistical significance of significant variables
+
+========================================================================================
+
+OBJECTIVE 2:
+
+With a simple logistic regression model as a baseline, perform additional competing models to improve on prediction performance metrics.
+
+NOTE: I ADDED THE ALL VARIABLES BACK IN FOR PCA ANALYSIS.
 
 For PCA,the variables are all in percentage form (without dividing by 100). This normalization reduces/eliminates the scale sensitivity seen with PCA preventing bias from variables with different scales.
 ```{r PCA}
 
-# let's continue removing race variables
-data2_norace <- data2[,1:14]
-
 # PCA
-dat.x <- data2_norace[,2:14]
-dat.y <- data2_norace[,1]
+dat.x <- data2[,2:12]
+dat.y <- data2[,1]
 pc.result<-prcomp(dat.x,scale.=TRUE)
 pc.scores<-pc.result$x
 pc.scores<-data.frame(pc.scores)
@@ -95,10 +161,17 @@ pc.result$rotation
 pc.eigen<-(pc.result$sdev)^2
 pc.prop<-pc.eigen/sum(pc.eigen)
 pc.cumprop<-cumsum(pc.prop)
-plot(1:13,pc.prop,type="l",main="Scree Plot",ylim=c(0,1),xlab="PC #",ylab="Proportion of Variation")
-axis(1, seq(1,13,1))
-lines(1:13,pc.cumprop,lty=3)
+plot(1:11,pc.prop,type="l",main="Scree Plot",ylim=c(0,1),xlab="PC #",ylab="Proportion of Variation")
+axis(1, seq(1,11,1))
+lines(1:11,pc.cumprop,lty=3)
 ```
+
+OPEN ACTIONS:
+
+1. WITH THE NEW PREDICTORS THE PARAGRAPH BELOW NEEDS TO BE MODIFIED
+2. Add comments for observations
+3. Add other models (KNN, RANDOM FOREST,...)
+4. Add summary comparison table
 
 Judging from the intial scree plot, it looks as though the third Principal component carries 90% of the variation.  The main loading coefficients for PC3 were Smoking, Diabetic, Insufficient Sleep, Uninsured, Some college and Rural housing. By far the largest coefficient was Uninsured (.7637) which leads us to believe insurance plays a large part in obesity.
 
@@ -166,25 +239,14 @@ ggplot(data = pc.scores, aes(x = PC1, y = PC11)) +
     geom_vline(xintercept = 0, colour = "gray65") +
     ggtitle("PCA plot of Health Data")
 
-ggplot(data = pc.scores, aes(x = PC1, y = PC12)) +
-    geom_point(aes(col=Obese_Class), size=1)+
-  geom_hline(yintercept = 0, colour = "gray65") +
-    geom_vline(xintercept = 0, colour = "gray65") +
-    ggtitle("PCA plot of Health Data")
-
-ggplot(data = pc.scores, aes(x = PC1, y = PC13)) +
-    geom_point(aes(col=Obese_Class), size=1)+
-  geom_hline(yintercept = 0, colour = "gray65") +
-    geom_vline(xintercept = 0, colour = "gray65") +
-    ggtitle("PCA plot of Health Data")
 ```
 
 ```{r Steve LDA}
-samplesize=nrow(data2_norace)
+samplesize=nrow(data2)
 train_percent = .75
 train_indices = sample(seq(1,samplesize,length = samplesize),train_percent*samplesize) # get random indices
-train = data2_norace[train_indices,] # random training data 
-test = data2_norace[-train_indices,] # random test data 
+train = data3[train_indices,] # random training data 
+test = data3[-train_indices,] # random test data 
 
 lda <- lda(Obese_Class~.,data = train)
 qda <- qda(Obese_Class~.,data = train)
@@ -249,23 +311,24 @@ text(x = .25, y = .75,paste("AUC = ", round(auc.train[[1]],3), sep = ""))
 ```{r LDA}
 #LDA run with all variables except obesity rating. 
 #I should just delete this.  Lol.
-library(MASS)
-ldadat <- data
-ldadat <- ldadat[,4:26] #Takeout id and location data
-ldadat <- ldadat[,-3] #Remove obesity column from analysis
 
-obeselda<-lda(Obese_Class~.,data=ldadat) # Run LDA on Obesity Categorical
+#library(MASS)
+#ldadat <- data
+#ldadat <- ldadat[,4:26] #Takeout id and location data
+#ldadat <- ldadat[,-3] #Remove obesity column from analysis
 
-pred<-predict(obeselda,newdata=ldadat)$class #Yielding categorical obesity response
-Tonsoffun<-ldadat$Obese_Class
+#obeselda<-lda(Obese_Class~.,data=ldadat) # Run LDA on Obesity Categorical
 
-x<-table(pred,Tonsoffun) # Creating a confusion matrix
-x
+#pred<-predict(obeselda,newdata=ldadat)$class #Yielding categorical obesity response
+#Tonsoffun<-ldadat$Obese_Class
+
+#x<-table(pred,Tonsoffun) # Creating a confusion matrix
+#x
 #Missclassification Error
-ME<-(x[2,1]+x[1,2])/3136
-ME
+#ME<-(x[2,1]+x[1,2])/3136
+#ME
 #Calculating overall accuracy
-1-ME
+#1-ME
 
 ```
 
