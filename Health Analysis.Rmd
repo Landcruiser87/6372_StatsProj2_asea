@@ -42,13 +42,15 @@ data$Obese_Class <- as.factor(as.character(data$Obese_Class))
 # add non-white variable
 data$NonWhite <- 100-data$White 
 
+#would we want to add a Region variable?   Could do some interesting categorical analysis by region?
+
 # -- create new data set with obese_class first --
 data2 <- data[,c(25,5,7:23,26,24)]
 
 # scatter matrices, with Obese at the top
-pairs(data2[,c(2:8)],col=data$Obese_Class)   # personal physical conditions
-pairs(data2[,c(9:14)],col=data$Obese_Class)  # education, living
-pairs(data2[,c(15:21)],col=data$Obese_Class) # race, language
+pairs(data2[,c(2:8)],col=data$Obese_Class, main="Personal Physical Condition") # personal physical conditions
+pairs(data2[,c(9:14)],col=data$Obese_Class, main = "Education/Living")  # education, living
+pairs(data2[,c(15:21)],col=data$Obese_Class, main = "Race/Language") # race, language
 
 # predictor heatmap correlations
 cor1 <- cor(data2[,2:8])
@@ -64,12 +66,15 @@ heatmap.2(cor2,col=redgreen(75),
 heatmap.2(cor3,col=redgreen(75), 
           density.info="none", trace="none", dendrogram=c("both"), 
           symm=F,symkey=T,symbreaks=T, scale="none",key=T)
+
+
 ```
 
 Get Variance Stats...We should rank/sort these
 ```{r Variance}
 cov(data2[2:14]) # remove race
 sum(diag(cov(data2[2:14]))) # total variance
+
 ```
 
 For PCA,the variables are all in percentage form (without dividing by 100). This normalization reduces/eliminates the scale sensitivity seen with PCA preventing bias from variables with different scales.
@@ -206,7 +211,7 @@ lda_ME
 #lda Overall Accuracy
 1-lda_ME
 
-#qda overall misclassification rrror rate
+#qda overall misclassification error rate
 qda_ME<-(qda_cm[2,1]+qda_cm[1,2])/(qda_cm[1,2]+qda_cm[2,2])
 qda_ME
 
@@ -246,7 +251,7 @@ text(x = .25, y = .75,paste("AUC = ", round(auc.train[[1]],3), sep = ""))
 
 ```
 
-```{r LDA}
+```{r Andy_LDA}
 #LDA run with all variables except obesity rating. 
 #I should just delete this.  Lol.
 library(MASS)
