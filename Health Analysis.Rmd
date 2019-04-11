@@ -308,28 +308,4 @@ text(x = .25, y = .75,paste("AUC = ", round(auc.train[[1]],3), sep = ""))
 
 ```
 
-```{r LDA}
-#LDA run with all variables except obesity rating. 
-#I should just delete this.  Lol.
-
-#library(MASS)
-#ldadat <- data
-#ldadat <- ldadat[,4:26] #Takeout id and location data
-#ldadat <- ldadat[,-3] #Remove obesity column from analysis
-
-#obeselda<-lda(Obese_Class~.,data=ldadat) # Run LDA on Obesity Categorical
-
-#pred<-predict(obeselda,newdata=ldadat)$class #Yielding categorical obesity response
-#Tonsoffun<-ldadat$Obese_Class
-
-#x<-table(pred,Tonsoffun) # Creating a confusion matrix
-#x
-#Missclassification Error
-#ME<-(x[2,1]+x[1,2])/3136
-#ME
-#Calculating overall accuracy
-#1-ME
-
-```
-
 
