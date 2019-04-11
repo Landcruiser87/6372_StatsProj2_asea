@@ -13,6 +13,7 @@ library(gplots)
 library(ggplot2)
 library(ROCR)
 library(MASS)
+library(corrplot)
 ```
 
 The national dataset used in this study comes from the 2017 County Health Rankings website. Since each state and county have varying populations, we chose to use the data as a percent of the population. The death rate is the age-adjusted Years of Potential Life Lost rate per 100,000.  
@@ -71,6 +72,9 @@ for(i in 1:11) {
 OPEN ACTIONS: 
 
 1. Determine if skew is an issue. I don't think it is with our sample size.
+
+AH- Screw transforming!  Its a slight skew, but nothing blatant.  I went hunting for outliers and found some in Diabetic, Uninsured, and Insuffiecient sleep.  But again.  Huge sample size so i'm not sure its worth taking out. 
+
 2. Identify any outliers and handle them if needed.
 
 ```{r EDA}
@@ -96,19 +100,25 @@ heatmap.2(cor1,col=redgreen(75),
 heatmap.2(cor2,col=redgreen(75), 
           density.info="none", trace="none", dendrogram=c("both"), 
           symm=F,symkey=T,symbreaks=T, scale="none",key=T)
+
+#Correlation Plot 
+cor3 <- cor(data2_norace[,2:14])
+df_corr <-corrplot(cor3, type="upper", addCoef.col = "white", number.digits = 2, number.cex = 0.5, method="square", order="hclust", title="Variable Corr Heatmap",tl.srt=45, tl.cex = 0.8)
+
 ```
 
 Get Variance Stats
 
 ```{r Variance}
-cov.mat <- cov(data2[2:11]) # remove race
+round(cov(data2[2:11]), 2) # remove race
 sum(diag(cov(data2[2:11]))) # total variance
-
 ```
 
 OPEN ACTIONS: 
 
 1. Discuss heat maps & covariance
+
+AH-Variance looks to be pretty good.  Some_college might be screwing it up a tad bit, but i don't think its cause for concern.  As per heatmaps, We have some correlation with Smoking/Freq Mental distress and drinking/Freq Physical Distress -   (not surprising).  Also, mental/physical stress seem to be correlated. 
 
 ```{r Logistic Reg Model}
 # Logistics Regression
