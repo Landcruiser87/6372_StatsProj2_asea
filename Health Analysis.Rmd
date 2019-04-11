@@ -325,4 +325,11 @@ text(x = .25, y = .75,paste("AUC = ", round(auc.train[[1]],3), sep = ""))
 
 ```
 
+```{r Rando_Forrest}
+library(randomForest) 
+Obsese.full.model <- randomForest(Obese_Class~., data=train, importance = TRUE) #importance(rf_model) #Variable importance for placement order (Forward, Backward, Stepwise) 
+varImpPlot(Obsese.full.model,type=1, main='Random Tree Variable Importance') 
+set.seed(25) #Used this to sanity check the ASE results
 
+
+```
