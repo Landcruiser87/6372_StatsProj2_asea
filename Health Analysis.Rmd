@@ -68,6 +68,22 @@ par(mfrow=c(2,6))
 for(i in 1:11) {
     hist(predictors[,i], main=names(predictors)[i])
 }
+
+
+# Can use if we want.  Doesn't matter to jebus. Inputting here for now.
+# library(purrr)
+# library(tidyr)
+# library(ggplot2)
+# 
+# plotAllNumeric <- function(df){
+#     df%>%keep(is.numeric) %>%
+#     gather() %>%
+#     ggplot(aes(value)) +
+#     facet_wrap(~ key, scales = "free") +
+#     geom_histogram() 
+# }
+# 
+# plotAllNumeric(data)
 ```
 
 OPEN ACTIONS: 
@@ -103,7 +119,7 @@ heatmap.2(cor2,col=redgreen(75),
           symm=F,symkey=T,symbreaks=T, scale="none",key=T)
 
 #Correlation Plot 
-cor3 <- cor(data2_norace[,2:14])
+cor3 <- cor(data2[,2:12])
 df_corr <-corrplot(cor3, type="upper", addCoef.col = "white", number.digits = 2, number.cex = 0.5, method="square", order="hclust", title="Variable Corr Heatmap",tl.srt=45, tl.cex = 0.8)
 
 ```
