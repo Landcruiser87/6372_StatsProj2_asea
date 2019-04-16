@@ -17,7 +17,7 @@ library(corrplot)
 library(randomForest) 
 ```
 
-The national dataset used in this study comes from the 2017 County Health Rankings website. Since each state and county have varying populations, we chose to use the data as a percent of the population. The death rate is the age-adjusted Years of Potential Life Lost rate per 100,000.  
+The national dataset used in this study comes from the 2017 County Health Rankings website. Since each state and county have varying populations, we chose to use the data as a percent of the population. The death rate is the age-adjusted Years of Potential Life Lost rate per 100,000. All variables are continuous so we do not need to be concerned about unbalanced categorical variables.
 
 OBJECTIVE1
 
@@ -44,7 +44,7 @@ data = read.csv("./Data/CHR_Data.csv")
 summary(data)
 ```
 
-The summary statistics show missing values for Premature_Death_Rate, Unemployed, Uninsured, and Graduation_Rate. We will impute the missing data with the median values since some distributions show a little skew when comparing the mean and medians. We will later show the histograms.
+The summary statistics show missing values for Premature_Death_Rate, Unemployed, Uninsured, and Graduation_Rate. We impute the missing data with the median values since some distributions show a little skew when comparing the mean and medians. We will later show the histograms confirm some skew.
 
 ```{r EDA Impute}
 # impute variables with their medians, prefer medians in the event there is any skew
@@ -53,11 +53,15 @@ data$Unemployed <- with(data,impute(Unemployed,median))
 data$Uninsured <- with(data,impute(Uninsured,median))
 data$Graduation_Rate <- with(data,impute(Graduation_Rate))
 
+## if we are not using Premature_Death_Rate, we can remove
+
 # rescale Premature_Death_Rate so min value = 2.947 vs 2947, just a preference so it's not scaled so diff from predictors
 data$Premature_Death_Rate <- data$Premature_Death_Rate/1000
 ```
 
-The histograms confirm some skew with Frequent_Mental_Distress, Frequent_Physical_Distress,Uninsured, Unemployed, and Severe_Housing_Problems.
+SKEW 
+
+The histograms confirm some skew with Frequent_Mental_Distress, Frequent_Physical_Distress,Uninsured, Unemployed, and Severe_Housing_Problems. There is no concern or need to do anything about the skew since we have a relatively large data set and we are performing a logistic regression. 
 
 ```{r EDA Histograms}
 # get chosen predictors for EDA
@@ -70,32 +74,35 @@ for(i in 1:11) {
 }
 
 
-# Can use if we want.  Doesn't matter to jebus. Inputting here for now.
-# library(purrr)
-# library(tidyr)
-# library(ggplot2)
-# 
-# plotAllNumeric <- function(df){
-#     df%>%keep(is.numeric) %>%
-#     gather() %>%
-#     ggplot(aes(value)) +
-#     facet_wrap(~ key, scales = "free") +
-#     geom_histogram() 
-# }
-# 
-# plotAllNumeric(data)
+## Can use if we want.  Doesn't matter to jebus. Inputting here for now.
+#library(purrr)
+#library(tidyr)
+#library(ggplot2)
+#
+#plotAllNumeric <- function(predictors){
+#   df%>%keep(is.numeric) %>%
+#   gather() %>%
+#   ggplot(aes(value)) +
+#   facet_wrap(~ key, scales = "free") +
+#   geom_histogram() 
+#}
+#
+#plotAllNumeric(predictors)
 ```
 
-OPEN ACTIONS: 
+OUTLIERS (Used SAS, will put screen shots and comments about Cook's D in final paper)
 
-1. Determine if skew is an issue. I don't think it is with our sample size.
+We remove the data for Yuma county in Arizona due to the outlier it creates for unemployment. The county is along the Mexico border and is predominately a farming community with migrant (seasonal) workers. This situation is uncommon and not typical of U.S. counties. We also removed the data for Imperial county in California for the same reasons. It is adjacent to Yuma county.
 
-AH- Screw transforming!  Its a slight skew, but nothing blatant.  I went hunting for outliers and found some in Diabetic, Uninsured, and Insuffiecient sleep.  But again.  Huge sample size so i'm not sure its worth taking out. 
+We remove the data for Bethel, Northwest Arctic and Yukon-Koyukuk counties in Alaska for Severe Housing Problems. There are four factors that contribute to this category. They are housing units that lack complete kitchens, lack complete plumbing facilities, overcrowded, or severely cost burdened. These counties reside in Alaska where the cost to build is beyond what the residents can afford and therefore overcrowding is above normal compared to the rest of the United States. [Nathan Wiltse, Dustin Madden, 2018 Alaska Housing Assessment, Jan 17, 2018, https://www.ahfc.us/download_file/view/5124/853]
 
-2. Identify any outliers and handle them if needed.
+```{r Remove Outliers}
+data <- data[!rowSums(data[c(-1:-15,-17:-24)] > 20),] # removed unemployment outliers for migrant farming counties
+data <- data[!rowSums(data[c(-1:-16,-18:-24)] > 50),] # removed unemployment outliers for migrant farming counties
+```
 
-```{r EDA}
-# create Obese Binary Classification
+```{r EDA Scatter Plots}
+# create obese binary classification where BMI >= 30 is considered Obese, 0 = not obese, 1 = obese
 data$Obese_Class <- 1
 data[data$Obese < 30, "Obese_Class"] <- 0
 data$Obese_Class <- as.factor(as.character(data$Obese_Class))
@@ -103,37 +110,98 @@ data$Obese_Class <- as.factor(as.character(data$Obese_Class))
 # -- create new data set with obese_class first --
 data2 <- data[,c(25,5,7:13,15:17)]
 
-# scatter matrices, with Obese at the top
-pairs(data2[,c(2:6)],col=data$Obese_Class)
-pairs(data2[,c(7:11)],col=data$Obese_Class)
+# summary stats by group Obese_Class, to add to SAS Box Plots
+t(aggregate(Smokers~Obese_Class,data=data2,summary))
+t(aggregate(Physically_Inactive~Obese_Class,data=data2,summary))
+t(aggregate(Excessive_Drinking~Obese_Class,data=data2,summary))
+t(aggregate(Frequent_Mental_Distress~Obese_Class,data=data2,summary))
+t(aggregate(Frequent_Physical_Distress~Obese_Class,data=data2,summary))
+t(aggregate(Diabetic~Obese_Class,data=data2,summary))
+t(aggregate(Insufficient_Sleep~Obese_Class,data=data2,summary))
+t(aggregate(Uninsured~Obese_Class,data=data2,summary))
+t(aggregate(Some_College~Obese_Class,data=data2,summary))
+t(aggregate(Unemployed~Obese_Class,data=data2,summary))
+t(aggregate(Severe_Housing_Problems~Obese_Class,data=data2,summary))
 
-# predictor heatmap correlations
-cor1 <- cor(data2[,2:6])
-cor2 <- cor(data2[,7:11])
-
-heatmap.2(cor1,col=redgreen(75), 
-          density.info="none", trace="none", dendrogram=c("both"), 
-          symm=F,symkey=T,symbreaks=T, scale="none",key=T)
-heatmap.2(cor2,col=redgreen(75), 
-          density.info="none", trace="none", dendrogram=c("both"), 
-          symm=F,symkey=T,symbreaks=T, scale="none",key=T)
-
-#Correlation Plot 
-cor3 <- cor(data2[,2:12])
-df_corr <-corrplot(cor3, type="upper", addCoef.col = "white", number.digits = 2, number.cex = 0.5, method="square", order="hclust", title="Variable Corr Heatmap",tl.srt=45, tl.cex = 0.8)
-
+# scatter matrices, with Obese as the colors
+pairs(data2[,2:12],col=data$Obese_Class)
 ```
+
+For the most part, the colored scatter plot matrix tells us our variables should do a decent job with logistic regression based on the color separation seen in the matrix. Strong correlation  is seen between the following:
+<ul>
+<li>Frequenet_Mental_Distress, Physical_Mental_Distress</li>
+</ul>
+There's fairly good correlation between the following:
+<ul>
+<li>Smokers, Frequent_Mental_Distress, Physical_Mental_Distress</li>
+<li>Diabetic, Physically_Inactive, Insufficient Sleep, Frequent_Mental_Distress, Frequent_Physical_Distress.</li>
+</ul>
+
+We'll review a correlation heatmap to get better insights next.
+
+```{r EDA Heatmap}
+# predictor heatmap correlations to examine whether variables are redundant
+cor1 <- cor(data2[,2:12])
+
+heatmap.2(cor1,col=redgreen(75), cexRow=.7,cexCol=0.7,
+          density.info="none", trace="none", dendrogram=c("both"), 
+          symm=F,symkey=T,symbreaks=T, scale="none",key=T)
+```
+
+The dendogramed heatmap confirms the strong correlation previously seen with Frequenet_Mental_Distress and Physical_Mental_Distress.
+
+
+Additional correlation is seen between the following:
+<ul>
+<li>Unemployed, Insufficient Sleep</li>
+<li>Some_College, Excessive_Drinking</li>
+<li>Diabetic, Physically_Inactive</li>
+<li>Smokers, Frequenet_Mental_Distress, Physical_Mental_Distress</li>
+<li>Uninured, Severe_Housing_Problems</li>
+</ul>
+
+The correlations identified by the dendogram surprisingly all make practical sense. One would expect to lose sleep if they were unemployed. Drinking being correlated to college makes sense. Diabetic is not uncommon amongst physically incative people. If someone is living in an area with severe housing problems, we might expect they would not be able to afford insurance.
+
+Let's review correlation with ratings seen in a variable correlation heatmap.
+
+```{r EDA CorrPlot}
+#Correlation Plot 
+cor2 <- cor(data2[,2:12])
+df_corr <-corrplot(cor2, type="upper", addCoef.col = "white", number.digits = 2, number.cex = 0.5, method="square", order="hclust", title="Variable Corr Heatmap",tl.srt=45, tl.cex = 0.8)
+```
+
+Based on the variable correlation heatmap, the order of correalated variables are:
+<ol>
+<li>Frequenet_Mental_Distress, Physical_Mental_Distress</li>
+<li>Smokers, Frequenet_Physical_Distress</li>
+<li>Smokers, Frequenet_Mental_Distress</li>
+<li>Diabetic, Physically_Inactive</li>
+<li>Frequent_Mental_Distress, Insufficient Sleep</li>
+<li>Unemployed, Frequent_Mental_Distress</li>
+<li>Unemployed, Frequent_Physical_Distress</li>
+<li>Excessive_Drinking, Frequent_Physical_Distress</li>
+<li>Excessive_Drinking, Frequent_Mental_Distress</li>
+<li>Diabetic, Frequent_Mental_Distress</li>
+</ol>
+
+Let's look at the VIFs to confirm collinear variables.
+```{r}
+library(ResourceSelection)
+model.main<-glm(Obese_Class ~ ., data=data2,family = binomial(link="logit"))
+### NOT WORKING (vif(model.main)[,3])^2
+```
+
 
 Get Variance Stats
 
 ```{r Variance}
-round(cov(data2[2:11]), 2) # remove race
-sum(diag(cov(data2[2:11]))) # total variance
+round(cov(data2[2:12]), 2) 
+sum(diag(cov(data2[2:12]))) # total variance
 ```
 
 OPEN ACTIONS: 
 
-1. Discuss heat maps & covariance
+1. Discuss covariance
 
 AH-Variance looks to be pretty good.  Some_college might be screwing it up a tad bit, but i don't think its cause for concern.  As per heatmaps, We have some correlation with Smoking/Freq Mental distress and drinking/Freq Physical Distress -   (not surprising).  Also, mental/physical stress is heavily correlated. 
 
