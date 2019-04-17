@@ -15,7 +15,6 @@ library(ROCR)
 library(MASS)
 library(corrplot)
 library(randomForest) 
-library(cars)
 ```
 
 The national dataset used in this study comes from the 2017 County Health Rankings website. Since each state and county have varying populations, we chose to use the data as a percent of the population. The death rate is the age-adjusted Years of Potential Life Lost rate per 100,000. All variables are continuous so we do not need to be concerned about unbalanced categorical variables.
