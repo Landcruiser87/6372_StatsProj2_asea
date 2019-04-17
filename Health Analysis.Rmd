@@ -237,9 +237,7 @@ confint(glm.fit) #Profile
 #odds ratio
 exp(cbind(odd = coef(glm.fit), confint(glm.fit)))
 
-#checking Proportion
-Obese.prop.test <- test$Obese_Class
-Obese.prop.train <- train$Obese_Class
+#checking group proportions
 table(test$Obese_Class)
 table(train$Obese_Class)
 
