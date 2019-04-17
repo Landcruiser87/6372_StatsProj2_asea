@@ -8,6 +8,7 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
+library(car)
 library(Hmisc)
 library(gplots)
 library(ggplot2)
@@ -68,7 +69,7 @@ The histograms confirm some skew with Frequent_Mental_Distress, Frequent_Physica
 predictors <- data[,c(5,7:13,15:17)]
 
 # histogram of chosen predictors
-par(mfrow=c(2,6))
+par(mfrow=c(3,4))
 for(i in 1:11) {
     hist(predictors[,i], main=names(predictors)[i])
 }
@@ -184,12 +185,12 @@ Based on the variable correlation heatmap, the order of correalated variables ar
 <li>Diabetic, Frequent_Mental_Distress</li>
 </ol>
 
-Let's look at the VIFs to confirm collinear variables.
+Let's look at the VIFs to confirm the collinear variables.
 
 ```{r VIF Check}
 # Logistics Regression
-glm.fit <- glm(Obese_Class ~ ., data = data2, family = binomial)
-vif(glm.fit)
+glm.vifchk <- glm(Obese_Class ~ ., data = data2, family = binomial(link="logit"))
+vif(glm.vifchk)
 ````
 
 The VIFS and multiple visual tools agree there is a strong relationship between Frequent_Mental_Distress and Frequent_Physical_Distress. We choose to remove Frequent_Physical_Distress and rerun our logistic regression model.
@@ -202,13 +203,6 @@ glm.fit <- glm(Obese_Class ~ ., data = data2, family = binomial)
 summary(glm.fit)
 ```
 
-
-Get Variance Stats
-
-```{r Variance}
-round(cov(data2[2:11]), 2) 
-sum(diag(cov(data2[2:11]))) # total variance
-```
 
 OPEN ACTIONS: 
 
@@ -249,11 +243,11 @@ OBJECTIVE 2:
 
 With a simple logistic regression model as a baseline, perform additional competing models to improve on prediction performance metrics.
 
-NOTE: I ADDED THE ALL VARIABLES BACK IN FOR PCA ANALYSIS, EXCEPT THE COLLINEAR ONE.
+Since PCA is for feature reduction, we will add back all variables except the one with strong collinearity,  Frequent_Physical_Distress. 
 
-For PCA,the variables are all in percentage form (without dividing by 100). This normalization reduces/eliminates the scale sensitivity seen with PCA preventing bias from variables with different scales.
+The variables are all in percentage form (without dividing by 100). Is is fortunate to already have this type of normalization. It reduces/eliminates the scale sensitivity seen with PCA. Otherwise, we could have exaggerated influence or bias from variables with large variances. 
+
 ```{r PCA}
-
 # PCA
 dat.x <- data2[,2:11]
 dat.y <- data2[,1]
@@ -342,6 +336,13 @@ ggplot(data = pc.scores, aes(x = PC1, y = PC10)) +
     geom_vline(xintercept = 0, colour = "gray65") +
     ggtitle("PCA plot of Health Data")
 
+```
+
+Get Variance Stats
+
+```{r Variance}
+round(cov(data2[2:11]), 2) 
+sum(diag(cov(data2[2:11]))) # total variance
 ```
 
 ```{r Steve LDA}
