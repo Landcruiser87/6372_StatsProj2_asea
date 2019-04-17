@@ -191,7 +191,7 @@ Let's look at the VIFs to confirm the collinear variables.
 # Logistics Regression
 glm.vifchk <- glm(Obese_Class ~ ., data = data2, family = binomial(link="logit"))
 vif(glm.vifchk)
-````
+```
 
 The VIFS and multiple visual tools agree there is a strong relationship between Frequent_Mental_Distress and Frequent_Physical_Distress. We choose to remove Frequent_Physical_Distress and rerun our logistic regression model.
 
@@ -217,6 +217,13 @@ SB-After talking to Turner we need to decide what vars to keep from a practical 
 # reduce data set to include only significant variables
 data3 = data2[,c(1:3,5,6,8)]
 
+#Create test/train split
+samplesize=nrow(data3)
+train_percent = .75
+train_indices = sample(seq(1,samplesize,length = samplesize),train_percent*samplesize) # get random indices
+train = data3[train_indices,] # random training data
+test = data3[-train_indices,] # random test data
+
 # Logistics Regression
 glm.fit <- glm(Obese_Class ~ ., data = data3, family = binomial)
 summary(glm.fit)
@@ -224,7 +231,16 @@ summary(glm.fit)
 confint.default(glm.fit) #Wald
 confint(glm.fit) #Profile
 
-#Performance Metrics
+
+#odds ratio
+exp(cbind(odd = coef(glm.fit), confint(glm.fit)))
+
+
+#Model prediction/Accuracy
+glm.prob <- glm.fit %>% predict(test, type = "response")
+predicted.classes <-ifelse(glm.prob > 0.5, 0, 1)
+observed.classes <- test$Obese_Class
+mean(predicted.classes == observed.classes)
 
 ```
 
