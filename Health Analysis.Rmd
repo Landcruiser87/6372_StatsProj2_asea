@@ -185,18 +185,29 @@ Based on the variable correlation heatmap, the order of correalated variables ar
 </ol>
 
 Let's look at the VIFs to confirm collinear variables.
-```{r}
-library(ResourceSelection)
-model.main<-glm(Obese_Class ~ ., data=data2,family = binomial(link="logit"))
-### NOT WORKING (vif(model.main)[,3])^2
+
+```{r VIF Check}
+# Logistics Regression
+glm.fit <- glm(Obese_Class ~ ., data = data2, family = binomial)
+vif(glm.fit)
+````
+
+The VIFS and multiple visual tools agree there is a strong relationship between Frequent_Mental_Distress and Frequent_Physical_Distress. We choose to remove Frequent_Physical_Distress and rerun our logistic regression model.
+
+
+```{r Logistic Reg Model}
+# Remove Frequent_Physical_Distress from data2
+data2 <- data2[-6] 
+glm.fit <- glm(Obese_Class ~ ., data = data2, family = binomial)
+summary(glm.fit)
 ```
 
 
 Get Variance Stats
 
 ```{r Variance}
-round(cov(data2[2:12]), 2) 
-sum(diag(cov(data2[2:12]))) # total variance
+round(cov(data2[2:11]), 2) 
+sum(diag(cov(data2[2:11]))) # total variance
 ```
 
 OPEN ACTIONS: 
@@ -205,16 +216,12 @@ OPEN ACTIONS:
 
 AH-Variance looks to be pretty good.  Some_college might be screwing it up a tad bit, but i don't think its cause for concern.  As per heatmaps, We have some correlation with Smoking/Freq Mental distress and drinking/Freq Physical Distress -   (not surprising).  Also, mental/physical stress is heavily correlated. 
 
-```{r Logistic Reg Model}
-# Logistics Regression
-glm.fit <- glm(Obese_Class ~ ., data = data2, family = binomial)
-summary(glm.fit)
 
-```
+SB-After talking to Turner we need to decide what vars to keep from a practical stand pt unless we agree with the stats recommendations.
 
 ```{r}
 # reduce data set to include only significant variables
-data3 = data2[,c(1:3,5,7,9)]
+data3 = data2[,c(1:3,5,6,8)]
 
 # Logistics Regression
 glm.fit <- glm(Obese_Class ~ ., data = data3, family = binomial)
@@ -242,13 +249,13 @@ OBJECTIVE 2:
 
 With a simple logistic regression model as a baseline, perform additional competing models to improve on prediction performance metrics.
 
-NOTE: I ADDED THE ALL VARIABLES BACK IN FOR PCA ANALYSIS.
+NOTE: I ADDED THE ALL VARIABLES BACK IN FOR PCA ANALYSIS, EXCEPT THE COLLINEAR ONE.
 
 For PCA,the variables are all in percentage form (without dividing by 100). This normalization reduces/eliminates the scale sensitivity seen with PCA preventing bias from variables with different scales.
 ```{r PCA}
 
 # PCA
-dat.x <- data2[,2:12]
+dat.x <- data2[,2:11]
 dat.y <- data2[,1]
 pc.result<-prcomp(dat.x,scale.=TRUE)
 pc.scores<-pc.result$x
@@ -264,9 +271,9 @@ pc.result$rotation
 pc.eigen<-(pc.result$sdev)^2
 pc.prop<-pc.eigen/sum(pc.eigen)
 pc.cumprop<-cumsum(pc.prop)
-plot(1:11,pc.prop,type="l",main="Scree Plot",ylim=c(0,1),xlab="PC #",ylab="Proportion of Variation")
-axis(1, seq(1,11,1))
-lines(1:11,pc.cumprop,lty=3)
+plot(1:10,pc.prop,type="l",main="Scree Plot",ylim=c(0,1),xlab="PC #",ylab="Proportion of Variation")
+axis(1, seq(1,10,1))
+lines(1:10,pc.cumprop,lty=3)
 ```
 
 OPEN ACTIONS:
@@ -330,12 +337,6 @@ ggplot(data = pc.scores, aes(x = PC1, y = PC9)) +
     ggtitle("PCA plot of Health Data")
 
 ggplot(data = pc.scores, aes(x = PC1, y = PC10)) +
-    geom_point(aes(col=Obese_Class), size=1)+
-  geom_hline(yintercept = 0, colour = "gray65") +
-    geom_vline(xintercept = 0, colour = "gray65") +
-    ggtitle("PCA plot of Health Data")
-
-ggplot(data = pc.scores, aes(x = PC1, y = PC11)) +
     geom_point(aes(col=Obese_Class), size=1)+
   geom_hline(yintercept = 0, colour = "gray65") +
     geom_vline(xintercept = 0, colour = "gray65") +
