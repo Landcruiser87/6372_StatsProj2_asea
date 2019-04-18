@@ -1,7 +1,7 @@
 ---
 title: "Health Analysis"
 author: "asea"
-date: "April 4, 2019"
+date: "April 17, 2019"
 output: html_document
 ---
 
@@ -18,6 +18,7 @@ library(corrplot)
 library(randomForest)
 library(epitools)
 library(dplyr)
+library(glmnet)
 ```
 
 The national dataset used in this study comes from the 2017 County Health Rankings website. Since each state and county have varying populations, we chose to use the data as a percent of the population. The death rate is the age-adjusted Years of Potential Life Lost rate per 100,000. All variables are continuous so we do not need to be concerned about unbalanced categorical variables.
@@ -26,6 +27,7 @@ OBJECTIVE1
 
 We want to model the probability of being obsese (BMI > 30) for a particular variable. The team has decided to use the following variables as the predictors.The variable data represent the percentage of the population for a specifc US county.
 
+Health Variables
 - Smokers
 - Physically Incactive
 - Excesive Drinking
@@ -33,15 +35,22 @@ We want to model the probability of being obsese (BMI > 30) for a particular var
 - Frequent Physical Distress
 - Diabetic
 - Insufficient Sleep
+
+Demographic Type Variables
 - Uninsured
 - Some College 
 - Unemployed
 - Severe Housing Problems
 
 
+EXPLORATORY DATA ANALYSIS
+
 ```{r EDA Start}
 # import health data
-data = read.csv("./Data/CHR_Data.csv")
+alldata = read.csv("./Data/CHR_Data.csv")
+
+# get initial data
+data <- alldata[,-c(1:3,4,14,18:24)]
 
 # show data summary to identify variables with missing data
 summary(data)
@@ -51,46 +60,23 @@ The summary statistics show missing values for Premature_Death_Rate, Unemployed,
 
 ```{r EDA Impute}
 # impute variables with their medians, prefer medians in the event there is any skew
-data$Premature_Death_Rate <- with(data,impute(Premature_Death_Rate,median)) # may use this later so imputing now
 data$Unemployed <- with(data,impute(Unemployed,median))
 data$Uninsured <- with(data,impute(Uninsured,median))
-data$Graduation_Rate <- with(data,impute(Graduation_Rate))
-
-## if we are not using Premature_Death_Rate, we can remove
-
-# rescale Premature_Death_Rate so min value = 2.947 vs 2947, just a preference so it's not scaled so diff from predictors
-data$Premature_Death_Rate <- data$Premature_Death_Rate/1000
 ```
 
-SKEW 
+EDA-SKEW 
 
 The histograms confirm some skew with Frequent_Mental_Distress, Frequent_Physical_Distress,Uninsured, Unemployed, and Severe_Housing_Problems. There is no concern or need to do anything about the skew since we have a relatively large data set and we are performing a logistic regression. 
 
 ```{r EDA Histograms}
 # get chosen predictors for EDA
-predictors <- data[,c(5,7:13,15:17)]
+predictors <- data[,-2]
 
 # histogram of chosen predictors
 par(mfrow=c(3,4))
 for(i in 1:11) {
     hist(predictors[,i], main=names(predictors)[i])
 }
-
-
-## Can use if we want.  Doesn't matter to jebus. Inputting here for now.
-#library(purrr)
-#library(tidyr)
-#library(ggplot2)
-#
-#plotAllNumeric <- function(predictors){
-#   df%>%keep(is.numeric) %>%
-#   gather() %>%
-#   ggplot(aes(value)) +
-#   facet_wrap(~ key, scales = "free") +
-#   geom_histogram() 
-#}
-#
-#plotAllNumeric(predictors)
 ```
 
 OUTLIERS (Used SAS, will put screen shots and comments about Cook's D in final paper)
@@ -100,8 +86,16 @@ We remove the data for Yuma county in Arizona due to the outlier it creates for 
 We remove the data for Bethel, Northwest Arctic and Yukon-Koyukuk counties in Alaska for Severe Housing Problems. There are four factors that contribute to this category. They are housing units that lack complete kitchens, lack complete plumbing facilities, overcrowded, or severely cost burdened. These counties reside in Alaska where the cost to build is beyond what the residents can afford and therefore overcrowding is above normal compared to the rest of the United States. [Nathan Wiltse, Dustin Madden, 2018 Alaska Housing Assessment, Jan 17, 2018, https://www.ahfc.us/download_file/view/5124/853]
 
 ```{r Remove Outliers}
-data <- data[!rowSums(data[c(-1:-15,-17:-24)] > 20),] # removed unemployment outliers for migrant farming counties
-data <- data[!rowSums(data[c(-1:-16,-18:-24)] > 50),] # removed unemployment outliers for migrant farming counties
+# print data before outlier removal
+plot(data$Unemployed)
+plot(data$Severe_Housing_Problems)
+
+data <- data[!rowSums(data[c(-1:-10,-12)] > 20),] # removed unemployment outliers for migrant farming counties
+data <- data[!rowSums(data[c(-1:-11)] > 50),] # removed housing prob outliers for poor Alaska counties
+
+# print data after outlier removal
+plot(data$Unemployed)
+plot(data$Severe_Housing_Problems)
 ```
 
 ```{r EDA Scatter Plots}
@@ -111,7 +105,7 @@ data[data$Obese < 30, "Obese_Class"] <- 0
 data$Obese_Class <- as.factor(as.character(data$Obese_Class))
 
 # -- create new data set with obese_class first --
-data2 <- data[,c(25,5,7:13,15:17)]
+data2 <- data[,c(13,1,3:12)]
 
 # summary stats by group Obese_Class, to add to SAS Box Plots
 t(aggregate(Smokers~Obese_Class,data=data2,summary))
@@ -198,12 +192,136 @@ vif(glm.vifchk)
 The VIFS and multiple visual tools agree there is a strong relationship between Frequent_Mental_Distress and Frequent_Physical_Distress. We choose to remove Frequent_Physical_Distress and rerun our logistic regression model.
 
 
-```{r Logistic Reg Model}
+```{r Split Data Into Training and Test }
 # Remove Frequent_Physical_Distress from data2
-data2 <- data2[-6] 
+data3 <- data2[,-6] 
+
+# build a training & test data set
+samplesize=nrow(data3)
+train_percent = .75
+train_indices = sample(seq(1,samplesize,length = samplesize),train_percent*samplesize) # get random indices
+train = data3[train_indices,] # random training data
+test = data3[-train_indices,] # random test data
+
+# check train & test for training bias, shoudl see similar proportions of 0s & 1s in each
+summary(train$Obese_Class)
+summary(test$Obese_Class)
+
+train.x <- train[,2:ncol(train)]
+train.y <- train[,1] # Obese_Class is in column 1
+```
+
+Lets use PCA and hierarchical clustering to visualize for any other insights. It is fortunate to already have our data somewhat normalized on a percentage scale. It reduces the scale sensitivity seen with PCA. 
+
+```{r PCA}
+pc.result<-prcomp(train.x,scale.=TRUE)
+pc.scores<-pc.result$x
+pc.scores<-data.frame(pc.scores)
+pc.scores$Obese_Class<-train.y
+
+#Loadings for interpretation
+pc.result$rotation
+```
+
+```{r Scree Plot}
+# Scree plot
+pc.eigen<-(pc.result$sdev)^2
+pc.prop<-pc.eigen/sum(pc.eigen)
+pc.cumprop<-cumsum(pc.prop)
+plot(1:10,pc.prop,type="l",main="Scree Plot",ylim=c(0,1),xlab="PC #",ylab="Proportion of Variation")
+axis(1, seq(1,10,1))
+lines(1:10,pc.cumprop,lty=3)
+
+# Cumulative proportion plot
+cumulative.prop<-cumsum(pc.eigen/sum(pc.eigen))
+plot(1:10,cumulative.prop,type="l",main="Cumulative proportion",ylim=c(0.5,1))
+points(x=6, y=0.9, type="p", pch=10, col="green")
+```
+
+The cumulative plot shows 6 PCs are needed to retain ~90% of the total variation in the data.
+
+
+```{r Plot some Principal Components}
+
+#Use ggplot2 to plot pc's
+ggplot(data = pc.scores, aes(x = PC1, y = PC2)) +
+    geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC3)) +
+  geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+  geom_vline(xintercept = 0, colour = "gray65") +
+  ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC4)) +
+    geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC5)) +
+    geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC6)) +
+    geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC2, y = PC3)) +
+    geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC2, y = PC4)) +
+  geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+  geom_vline(xintercept = 0, colour = "gray65") +
+  ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC2, y = PC5)) +
+    geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC2, y = PC6)) +
+    geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+```
+
+The PCA plots show some separation but not great separation. 
+
+```{r}
+train.x <- as.matrix(train.x) # glmnet requires a matrix 
+cvfit <- cv.glmnet(train.x, train.y, family = "binomial", type.measure = "class", nlambda = 1000)
+plot(cvfit)
+coef(cvfit, s = "lambda.min")
+
+# predicted probabilities from logistic model  exp(b)/(1+exp(b))
+fit.pred <- predict(cvfit, newx = train.x, type = "response")
+
+#Compare the prediction to the real outcome
+head(fit.pred)
+head(train.y)
+```
+
+
 glm.fit <- glm(Obese_Class ~ ., data = data2, family = binomial)
 summary(glm.fit)
-```
+
+MODEL CHECK
+
 
 
 OPEN ACTIONS: 
@@ -268,31 +386,6 @@ With a simple logistic regression model as a baseline, perform additional compet
 
 Since PCA is for feature reduction, we will add back all variables except the one with strong collinearity,  Frequent_Physical_Distress. 
 
-The variables are all in percentage form (without dividing by 100). Is is fortunate to already have this type of normalization. It reduces/eliminates the scale sensitivity seen with PCA. Otherwise, we could have exaggerated influence or bias from variables with large variances. 
-
-```{r PCA}
-# PCA
-dat.x <- data2[,2:11]
-dat.y <- data2[,1]
-pc.result<-prcomp(dat.x,scale.=TRUE)
-pc.scores<-pc.result$x
-pc.scores<-data.frame(pc.scores)
-pc.scores$Obese_Class<-dat.y
-
-#Loadings for interpretation
-pc.result$rotation
-```
-
-```{r Scree Plot}
-#Scree plot
-pc.eigen<-(pc.result$sdev)^2
-pc.prop<-pc.eigen/sum(pc.eigen)
-pc.cumprop<-cumsum(pc.prop)
-plot(1:10,pc.prop,type="l",main="Scree Plot",ylim=c(0,1),xlab="PC #",ylab="Proportion of Variation")
-axis(1, seq(1,10,1))
-lines(1:10,pc.cumprop,lty=3)
-```
-
 OPEN ACTIONS:
 
 1. WITH THE NEW PREDICTORS THE PARAGRAPH BELOW NEEDS TO BE MODIFIED
@@ -302,64 +395,6 @@ OPEN ACTIONS:
 
 Judging from the intial scree plot, it looks as though the second Principal component carries just under 90% of the variation.  The main loading coefficients for PC2 were Physically_Inactive, Diabetic, Unemployed, and Severe_Housing_Problems. By far, the largest coefficient was Severe_Housing_Problems (-0.721) which leads us to believe that having consitent residence plays a big part in determining Obesity.
 
-```{r Plot some Principal Components}
-
-#Use ggplot2 to plot pc's
-ggplot(data = pc.scores, aes(x = PC1, y = PC2)) +
-    geom_point(aes(col=Obese_Class), size=1)+
-  geom_hline(yintercept = 0, colour = "gray65") +
-    geom_vline(xintercept = 0, colour = "gray65") +
-    ggtitle("PCA plot of Health Data")
-
-ggplot(data = pc.scores, aes(x = PC1, y = PC3)) +
-  geom_point(aes(col=Obese_Class), size=1)+
-  geom_hline(yintercept = 0, colour = "gray65") +
-  geom_vline(xintercept = 0, colour = "gray65") +
-  ggtitle("PCA plot of Health Data")
-
-ggplot(data = pc.scores, aes(x = PC1, y = PC4)) +
-    geom_point(aes(col=Obese_Class), size=1)+
-  geom_hline(yintercept = 0, colour = "gray65") +
-    geom_vline(xintercept = 0, colour = "gray65") +
-    ggtitle("PCA plot of Health Data")
-
-ggplot(data = pc.scores, aes(x = PC1, y = PC5)) +
-    geom_point(aes(col=Obese_Class), size=1)+
-  geom_hline(yintercept = 0, colour = "gray65") +
-    geom_vline(xintercept = 0, colour = "gray65") +
-    ggtitle("PCA plot of Health Data")
-
-ggplot(data = pc.scores, aes(x = PC1, y = PC6)) +
-    geom_point(aes(col=Obese_Class), size=1)+
-  geom_hline(yintercept = 0, colour = "gray65") +
-    geom_vline(xintercept = 0, colour = "gray65") +
-    ggtitle("PCA plot of Health Data")
-
-ggplot(data = pc.scores, aes(x = PC1, y = PC7)) +
-    geom_point(aes(col=Obese_Class), size=1)+
-  geom_hline(yintercept = 0, colour = "gray65") +
-    geom_vline(xintercept = 0, colour = "gray65") +
-    ggtitle("PCA plot of Health Data")
-
-ggplot(data = pc.scores, aes(x = PC1, y = PC8)) +
-  geom_point(aes(col=Obese_Class), size=1)+
-  geom_hline(yintercept = 0, colour = "gray65") +
-  geom_vline(xintercept = 0, colour = "gray65") +
-  ggtitle("PCA plot of Health Data")
-
-ggplot(data = pc.scores, aes(x = PC1, y = PC9)) +
-    geom_point(aes(col=Obese_Class), size=1)+
-  geom_hline(yintercept = 0, colour = "gray65") +
-    geom_vline(xintercept = 0, colour = "gray65") +
-    ggtitle("PCA plot of Health Data")
-
-ggplot(data = pc.scores, aes(x = PC1, y = PC10)) +
-    geom_point(aes(col=Obese_Class), size=1)+
-  geom_hline(yintercept = 0, colour = "gray65") +
-    geom_vline(xintercept = 0, colour = "gray65") +
-    ggtitle("PCA plot of Health Data")
-
-```
 
 Get Variance Stats
 
@@ -439,9 +474,9 @@ text(x = .25, y = .75,paste("AUC = ", round(auc.train[[1]],3), sep = ""))
 #Feel free to delete/update/put your own in.  I was just messing around with this and uploaded it for fun.  
 
 #f'ing forrests
-data4 <- data[,c(5,7:18,24:25)]
-Obsese.full.forrest <- randomForest(Obese_Class~., data=data4, importance = TRUE) #importance(rf_model) #Variable importance for placement order (Forward, Backward, Stepwise) 
-varImpPlot(Obsese.full.forrest,type=1, main='Random Tree Variable Importance') 
+#data4 <- data[,c(5,7:18,24:25)]
+#Obsese.full.forrest <- randomForest(Obese_Class~., data=data4, importance = TRUE) #importance(rf_model) #Variable importance for placement order (Forward, Backward, Stepwise) 
+#varImpPlot(Obsese.full.forrest,type=1, main='Random Tree Variable Importance') 
 
 ```
 
