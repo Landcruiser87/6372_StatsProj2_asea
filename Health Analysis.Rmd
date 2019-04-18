@@ -238,12 +238,13 @@ confint(glm.fit) #Profile
 exp(cbind(odd = coef(glm.fit), confint(glm.fit)))
 
 #checking group proportions
-table(test$Obese_Class)
-table(train$Obese_Class)
+proportion <- rbind(table(train$Obese_Class),table(test$Obese_Class))
+dimnames(proportion)<- list("Data Set"=c("Train","Test"), "Obese_Class"=c("Not obese","Obese"))
+proportion
 
 
 #Model prediction/Accuracy
-glm.pred <- glm.fit %>% predict(test, type = "response")
+glm.pred <- glm.fit %>% predict(train, type = "response")
 predicted.classes <-ifelse(glm.pred < 0.3, 0, 1)
 observed.classes <- test$Obese_Class
 mean(predicted.classes == observed.classes)
@@ -258,6 +259,7 @@ OPEN ACTIONS:
 2. Add CIs
 3. Explain coefficients
 4. Add hypothesis
+  * 
 5. Comment on practical vs statistical significance of significant variables
 
 ========================================================================================
