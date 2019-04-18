@@ -233,7 +233,6 @@ summary(glm.fit)
 confint.default(glm.fit) #Wald
 confint(glm.fit) #Profile
 
-
 #odds ratio
 exp(cbind(odd = coef(glm.fit), confint(glm.fit)))
 
@@ -251,16 +250,16 @@ mean(predicted.classes == observed.classes)
 
 #logit confusion matrix
 glm.pred1 <-predict(glm.fit, newdata = train, type = "response")
-glm_cm<-table(glm.pred1,train$Obese_Class)
+obsv.class <- (test$Obese_Class)
+glm_cm<-table(glm.pred1,obsv.class)
 glm_cm
 
-#lda overall misclassification rrror rate
+#logit overall misclassification rrror rate
 glm_ME<-(glm_cm[2,1]+glm_cm[1,2])/(glm_cm[1,2]+glm_cm[2,2])
 glm_ME
 
-#lda Overall Accuracy
+#logit Overall Accuracy
 1-glm_ME
-
 ```
 
 
