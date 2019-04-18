@@ -312,6 +312,31 @@ Rerun the model with signifcant predictor.
 glm.fit <- glm(Obese_Class ~ ., data = data4, family = binomial)
 summary(glm.fit)
 confint(glm.fit)
+
+# build a training & test data set
+samplesize=nrow(data4)
+train_percent = .8
+train_indices = sample(seq(1,samplesize,length = samplesize),train_percent*samplesize) # get random indices
+train = data4[train_indices,] # random training data
+test = data4[-train_indices,] # random test data
+
+train.x <-train[,2:ncol(train)]
+train.y <-train[,1]
+
+
+#--glm ROC--
+glmpred<-predict(glm.fit, newdata = train.x, type = "response")
+
+pred <- prediction(glmpred, train.y)
+roc.perf = performance(pred, measure = "tpr", x.measure = "fpr")
+auc.train <- performance(pred, measure = "auc")
+auc.train <- auc.train@y.values
+
+#Plot glm ROC
+plot(roc.perf,main="GLM")
+abline(a=0, b= 1) #Ref line indicating poor performance
+text(x = .25, y = .75,paste("AUC = ", round(auc.train[[1]],3), sep = ""))
+
 ```
 
 Our final fitted model for Problem 1 is shown below.
@@ -380,6 +405,7 @@ MODEL CHECK
 OPEN ACTIONS: 
 
 TEAM TO REVIEW ANALYSiS (Any other goodness of fit test to do?, Add comments througout incl conclusion)
+
 
 
 ========================================================================================
