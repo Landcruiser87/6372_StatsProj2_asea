@@ -191,7 +191,6 @@ vif(glm.vifchk)
 
 The VIFS and multiple visual tools agree there is a strong relationship between Frequent_Mental_Distress and Frequent_Physical_Distress. We choose to remove Frequent_Physical_Distress and rerun our logistic regression model.
 
-
 ```{r Split Data Into Training and Test }
 # Remove Frequent_Physical_Distress from data2
 data3 <- data2[,-6] 
@@ -203,36 +202,12 @@ train_indices = sample(seq(1,samplesize,length = samplesize),train_percent*sampl
 train = data3[train_indices,] # random training data
 test = data3[-train_indices,] # random test data
 
-<<<<<<< HEAD
 # check train & test for training bias, shoudl see similar proportions of 0s & 1s in each
 summary(train$Obese_Class)
 summary(test$Obese_Class)
 
 train.x <- train[,2:ncol(train)]
 train.y <- train[,1] # Obese_Class is in column 1
-=======
-# Logistics Regression
-glm.fit <- glm(Obese_Class ~ ., data = data3, family = binomial)
-summary(glm.fit)
-#Confidence Intervals
-confint.default(glm.fit) #Wald
-confint(glm.fit) #Profile
-
-#odds ratio
-exp(cbind(odd = coef(glm.fit), confint(glm.fit)))
-
-#checking group proportions
-proportion <- rbind(table(train$Obese_Class),table(test$Obese_Class))
-dimnames(proportion)<- list("Data Set"=c("Train","Test"), "Obese_Class"=c("Not obese","Obese"))
-proportion
-
-
-#Model prediction/Accuracy
-glm.pred <- glm.fit %>% predict(train, type = "response")
-predicted.classes <-ifelse(glm.pred < 0.3, 0, 1)
-observed.classes <- test$Obese_Class
-mean(predicted.classes == observed.classes)
->>>>>>> 230f0da8990205aa739eb3a3aa546bfbcbbbeb54
 ```
 
 Lets use PCA and hierarchical clustering to visualize for any other insights. It is fortunate to already have our data somewhat normalized on a percentage scale. It reduces the scale sensitivity seen with PCA. 
@@ -324,9 +299,9 @@ ggplot(data = pc.scores, aes(x = PC2, y = PC6)) +
 
 ```
 
-The PCA plots show some separation but not great separation. 
+The PCA plots show some separation but not great separation. We should still be able to get decent results using multiple variable. We will use the original variables and on the PCs.
 
-```{r}
+```{r L}
 train.x <- as.matrix(train.x) # glmnet requires a matrix 
 cvfit <- cv.glmnet(train.x, train.y, family = "binomial", type.measure = "class", nlambda = 1000)
 plot(cvfit)
@@ -340,9 +315,31 @@ head(fit.pred)
 head(train.y)
 ```
 
+```{r Previous Logistic Reg}
 
-glm.fit <- glm(Obese_Class ~ ., data = data2, family = binomial)
+# Logistics Regression
+glm.fit <- glm(Obese_Class ~ ., data = data3, family = binomial)
 summary(glm.fit)
+#Confidence Intervals
+confint.default(glm.fit) #Wald
+confint(glm.fit) #Profile
+
+#odds ratio
+exp(cbind(odd = coef(glm.fit), confint(glm.fit)))
+
+#checking group proportions
+proportion <- rbind(table(train$Obese_Class),table(test$Obese_Class))
+dimnames(proportion)<- list("Data Set"=c("Train","Test"), "Obese_Class"=c("Not obese","Obese"))
+proportion
+
+
+#Model prediction/Accuracy
+glm.pred <- glm.fit %>% predict(train, type = "response")
+predicted.classes <-ifelse(glm.pred < 0.3, 0, 1)
+observed.classes <- test$Obese_Class
+mean(predicted.classes == observed.classes)
+```
+
 
 MODEL CHECK
 
