@@ -189,34 +189,22 @@ glm.vifchk <- glm(Obese_Class ~ ., data = data2, family = binomial(link="logit")
 vif(glm.vifchk)
 ```
 
-The VIFS and multiple visual tools agree there is a strong relationship between Frequent_Mental_Distress and Frequent_Physical_Distress. We choose to remove Frequent_Physical_Distress and rerun our logistic regression model.
+The VIFS and multiple visual tools agree there is a strong relationship between Frequent_Mental_Distress and Frequent_Physical_Distress. We choose to remove Frequent_Physical_Distress. 
 
-```{r Split Data Into Training and Test }
+```{r Remove Highly Correlated Variable}
 # Remove Frequent_Physical_Distress from data2
 data3 <- data2[,-6] 
-
-# build a training & test data set
-samplesize=nrow(data3)
-train_percent = .75
-train_indices = sample(seq(1,samplesize,length = samplesize),train_percent*samplesize) # get random indices
-train = data3[train_indices,] # random training data
-test = data3[-train_indices,] # random test data
-
-# check train & test for training bias, shoudl see similar proportions of 0s & 1s in each
-summary(train$Obese_Class)
-summary(test$Obese_Class)
-
-train.x <- train[,2:ncol(train)]
-train.y <- train[,1] # Obese_Class is in column 1
 ```
 
-Lets use PCA and hierarchical clustering to visualize for any other insights. It is fortunate to already have our data somewhat normalized on a percentage scale. It reduces the scale sensitivity seen with PCA. 
+Lets use PCA to visualize any other insights. It is fortunate to already have our data somewhat normalized on a percentage scale. It reduces the scale sensitivity seen with PCA. 
 
 ```{r PCA}
-pc.result<-prcomp(train.x,scale.=TRUE)
+dat.x <- data3[,2:11]
+dat.y <- data3[,1]
+pc.result<-prcomp(dat.x,scale.=TRUE)
 pc.scores<-pc.result$x
 pc.scores<-data.frame(pc.scores)
-pc.scores$Obese_Class<-train.y
+pc.scores$Obese_Class<-dat.y
 
 #Loadings for interpretation
 pc.result$rotation
@@ -239,9 +227,7 @@ points(x=6, y=0.9, type="p", pch=10, col="green")
 
 The cumulative plot shows 6 PCs are needed to retain ~90% of the total variation in the data.
 
-
 ```{r Plot some Principal Components}
-
 #Use ggplot2 to plot pc's
 ggplot(data = pc.scores, aes(x = PC1, y = PC2)) +
     geom_point(aes(col=Obese_Class), size=1)+
@@ -299,9 +285,134 @@ ggplot(data = pc.scores, aes(x = PC2, y = PC6)) +
 
 ```
 
-The PCA plots show some separation but not great separation. We should still be able to get decent results using multiple variable. We will use the original variables and on the PCs.
+The PCA plots show some separation but not great separation. We should still be able to get decent results using multiple variable but we will use the original variables for our model.
 
-```{r L}
+For our model, we choose a logistic regression using LASSO for feature reduction.
+
+```{r First Pass Prob1 Log Regress}
+glm.fit <- glm(Obese_Class ~ ., data = data3, family = binomial)
+summary(glm.fit)
+```
+
+After different assessments and iterations, we agree with removing the following suggested insignificant predictors:
+- Excessive_Drinking
+- Insufficient_Sleep
+- Some_College
+- Unemployed
+- Sever_Housing_Problems
+
+```{r Remove Insig Vars}
+# removed insignifcant predictors
+data4 <- data3[,-c(4,7,9:11)]
+```
+
+Rerun the model with signifcant predictor.
+
+```{r Final Prob1 Log Regress}
+glm.fit <- glm(Obese_Class ~ ., data = data4, family = binomial)
+summary(glm.fit)
+confint(glm.fit)
+```
+
+Our final fitted model for Problem 1 is shown below.
+
+<font color="blue">
+log(p/(1-p)) = logit(p) = -10.18016 + 0.42933(Smokers) + 0.26783(Physically_Inactive) - 0.37621(Frequent_Mental_Distress) + 0.03314(Insufficient_Sleep)
+</font>
+
+Ho: There is no relationship between the predictor variables and whether someone is obese or not.
+Ha: There is a relationship between the predictor variables and whether someone is obese or not.
+
+We reject the null hypothesis with multiple predictors having p-values < 0.05.
+
+There is sufficient evidence at teh alpha = 0.05 level of significance to suggest 
+
+Beta0 = -10.1812 with 95% CI (-11.1835,-9.2105)
+The odds of being obese with all variables =t 0 is exp(-10.1812)=0.000038.
+
+Beta1 = 0.42933 with a 95% CI (0.37007,0.49044)
+This fitted model says, holding all other variables constant, the odds of being obese for smokers is exp(0.42933)=1.5362 over the odds of not being obese. In terms of percent change, the odds for being obese are 53.62% higher than the odds for not being obese.
+
+Beta2 = 0.26783 with a 95% CI (0.23894, 0.29762)
+The coefficient for Physically_Inactive, holding all other variables constant, says the odds of being obese is exp(0.26783)=1.3071 over the odds of not being obese. In terms of percent change, the odds for being obese are 30.71% higher than the odds for not being obese. 
+
+Beta3 = -0.37621 with a 95% CI (0.-45264, -0.302)
+The coefficient for Physically_Inactive, holding all other variables constant, says the odds of being obese is exp(-0.37621)=0.6865 over the odds of not being obese. In terms of percent change, the odds for being obese are 31.35% lower than the odds for not being obese. 
+
+Beta4 = 0.03314 with a 95% CI (0.00246, 0.06386)
+The coefficient for Physically_Inactive, holding all other variables constant, says the odds of being obese is exp(0.03314)=1.0337 over the odds of not being obese. In terms of percent change, the odds for being obese are 3.37% higher than the odds for not being obese. 
+
+Goodness of Fit: No categorical variables in our data so there is no need to do a Chi Square test.
+
+
+
+```{r Extra Logistic Reg}
+
+# Logistics Regression
+glm.fit <- glm(Obese_Class ~ ., data = data4, family = binomial)
+summary(glm.fit)
+
+#Confidence Intervals
+confint.default(glm.fit) #Wald
+confint(glm.fit) #Profile
+
+#odds ratio
+exp(cbind(odd = coef(glm.fit), confint(glm.fit)))
+
+#checking group proportions
+#proportion <- rbind(table(train$Obese_Class),table(test$Obese_Class))
+#dimnames(proportion)<- list("Data Set"=c("Train","Test"), "Obese_Class"=c("Not obese","Obese"))
+#proportion
+
+
+#Model prediction/Accuracy
+#glm.pred <- glm.fit %>% predict(train, type = "response")
+#predicted.classes <-ifelse(glm.pred < 0.3, 0, 1)
+#observed.classes <- test$Obese_Class
+#mean(predicted.classes == observed.classes)
+```
+
+
+MODEL CHECK
+
+
+
+OPEN ACTIONS: 
+
+TEAM TO REVIEW ANALYSiS (Any other goodness of fit test to do?, Add comments througout incl conclusion)
+
+
+========================================================================================
+
+OBJECTIVE 2:
+
+With a simple logistic regression model as a baseline, perform additional competing models to improve on prediction performance metrics.
+
+OPEN ACTIONS:
+1. Do a train/test split on the Prob1 model and get Accuracy/Specificity (data set = data4). Now we have a baseline to compare.
+2. Add an interactive term (alcohol x smoking, mental stress x unemployed ) and rerun the model to compare to the baseline and comment.
+3. Run the KNN model to compare
+4. Run Random Forrest to compare
+
+
+```{r Split Data Into Training and Test }
+# build a training & test data set
+samplesize=nrow(data4)
+train_percent = .8
+train_indices = sample(seq(1,samplesize,length = samplesize),train_percent*samplesize) # get random indices
+train = data3[train_indices,] # random training data
+test = data3[-train_indices,] # random test data
+
+# check train & test for training bias, shoudl see similar proportions of 0s & 1s in each
+summary(train$Obese_Class)
+summary(test$Obese_Class)
+
+train.x <- train[,2:ncol(train)]
+train.y <- train[,1] # Obese_Class is in column 1
+```
+
+
+```{r Log Regression Model for Prediction}
 train.x <- as.matrix(train.x) # glmnet requires a matrix 
 cvfit <- cv.glmnet(train.x, train.y, family = "binomial", type.measure = "class", nlambda = 1000)
 plot(cvfit)
@@ -315,117 +426,15 @@ head(fit.pred)
 head(train.y)
 ```
 
-```{r Previous Logistic Reg}
-
-# Logistics Regression
-glm.fit <- glm(Obese_Class ~ ., data = data3, family = binomial)
-summary(glm.fit)
-#Confidence Intervals
-confint.default(glm.fit) #Wald
-confint(glm.fit) #Profile
-
-#odds ratio
-exp(cbind(odd = coef(glm.fit), confint(glm.fit)))
-
-#checking group proportions
-proportion <- rbind(table(train$Obese_Class),table(test$Obese_Class))
-dimnames(proportion)<- list("Data Set"=c("Train","Test"), "Obese_Class"=c("Not obese","Obese"))
-proportion
-
-
-#Model prediction/Accuracy
-glm.pred <- glm.fit %>% predict(train, type = "response")
-predicted.classes <-ifelse(glm.pred < 0.3, 0, 1)
-observed.classes <- test$Obese_Class
-mean(predicted.classes == observed.classes)
-```
-
-
-MODEL CHECK
-
-
-
-OPEN ACTIONS: 
-
-1. Discuss covariance
-
-AH-Variance looks to be pretty good.  Some_college might be screwing it up a tad bit, but i don't think its cause for concern.  As per heatmaps, We have some correlation with Smoking/Freq Mental distress and drinking/Freq Physical Distress -   (not surprising).  Also, mental/physical stress is heavily correlated. 
-
-
-SB-After talking to Turner we need to decide what vars to keep from a practical stand pt unless we agree with the stats recommendations.
-
-```{r Log Regression Model_cont}
-# reduce data set to include only significant variables
-data3 = data2[,c(1:3,5,6,8)]
-
-#Create test/train split
-samplesize=nrow(data3)
-train_percent = .75
-train_indices = sample(seq(1,samplesize,length = samplesize),train_percent*samplesize) # get random indices
-train = data3[train_indices,] # random training data
-test = data3[-train_indices,] # random test data
-
-# Logistics Regression
-glm.fit <- glm(Obese_Class ~ ., data = data3, family = binomial)
-summary(glm.fit)
-#Confidence Intervals
-confint.default(glm.fit) #Wald
-confint(glm.fit) #Profile
-
-
-#odds ratio
-exp(cbind(odd = coef(glm.fit), confint(glm.fit)))
-
-#checking group proportions
-table(test$Obese_Class)
-table(train$Obese_Class)
-
-
-#Model prediction/Accuracy
-glm.pred <- glm.fit %>% predict(test, type = "response")
-predicted.classes <-ifelse(glm.pred < 0.3, 0, 1)
-observed.classes <- test$Obese_Class
-mean(predicted.classes == observed.classes)
-
-
-```
-
-
-OPEN ACTIONS: 
-
-1. Create performance metrics
-2. Add CIs
-3. Explain coefficients
-4. Add hypothesis
-5. Comment on practical vs statistical significance of significant variables
-
-========================================================================================
-
-OBJECTIVE 2:
-
-With a simple logistic regression model as a baseline, perform additional competing models to improve on prediction performance metrics.
-
-Since PCA is for feature reduction, we will add back all variables except the one with strong collinearity,  Frequent_Physical_Distress. 
-
-OPEN ACTIONS:
-
-1. WITH THE NEW PREDICTORS THE PARAGRAPH BELOW NEEDS TO BE MODIFIED
-2. Add comments for observations
-3. Add other models (KNN, RANDOM FOREST,...)
-4. Add summary comparison table
-
-Judging from the intial scree plot, it looks as though the second Principal component carries just under 90% of the variation.  The main loading coefficients for PC2 were Physically_Inactive, Diabetic, Unemployed, and Severe_Housing_Problems. By far, the largest coefficient was Severe_Housing_Problems (-0.721) which leads us to believe that having consitent residence plays a big part in determining Obesity.
-
-
+NOT SURE WE NEED THIS
 Get Variance Stats
-
 ```{r Variance}
-round(cov(data2[2:11]), 2) 
-sum(diag(cov(data2[2:11]))) # total variance
+round(cov(data4[2:6]), 2) 
+sum(diag(cov(data4[2:6]))) # total variance
 ```
 
 ```{r Steve LDA}
-samplesize=nrow(data2)
+samplesize=nrow(data4)
 train_percent = .75
 train_indices = sample(seq(1,samplesize,length = samplesize),train_percent*samplesize) # get random indices
 train = data3[train_indices,] # random training data 
