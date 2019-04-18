@@ -247,19 +247,6 @@ glm.pred <- glm.fit %>% predict(train, type = "response")
 predicted.classes <-ifelse(glm.pred < 0.3, 0, 1)
 observed.classes <- test$Obese_Class
 mean(predicted.classes == observed.classes)
-
-#logit confusion matrix
-glm.pred1 <-predict(glm.fit, newdata = train, type = "response")
-obsv.class <- (test$Obese_Class)
-glm_cm<-table(glm.pred1,obsv.class)
-glm_cm
-
-#logit overall misclassification rrror rate
-glm_ME<-(glm_cm[2,1]+glm_cm[1,2])/(glm_cm[1,2]+glm_cm[2,2])
-glm_ME
-
-#logit Overall Accuracy
-1-glm_ME
 ```
 
 
