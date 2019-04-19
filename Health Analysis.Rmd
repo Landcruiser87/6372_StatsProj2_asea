@@ -322,7 +322,13 @@ test = data4[-train_indices,] # random test data
 
 train.x <-train[,2:ncol(train)]
 train.y <-train[,1]
+```
 
+MODEL ASSUMPTIONS CHECK1
+
+We choose the receiving operating characteristic (ROC) as our first measure of classier performance.  
+
+```{r Assumption Chk1}
 
 #--glm ROC--
 glmpred<-predict(glm.fit, newdata = train.x, type = "response")
@@ -338,6 +344,24 @@ abline(a=0, b= 1) #Ref line indicating poor performance
 text(x = .25, y = .75,paste("AUC = ", round(auc.train[[1]],3), sep = ""))
 
 ```
+
+Our area under the curve (AUC) = 0.885. Since this is about 0.8 our model does a good job discriminating between obese and not obese.
+
+MODEL ASSUMPTIONS CHECK2
+
+A logistic regression model provides a better fit to the data if it demonstrates an improvement over a model with fewer predictors. We us the likelihood ratio test. We create a model with two key predictors and compare against our final model ("full model"). 
+
+```{r Goodness of Fit2} 
+glm.fitless <- glm(Obese_Class ~ Smokers+Physically_Inactive, data=data4, family=binomial) 
+anova(glm.fit,glm.fitless, test="Chisq") 
+``` 
+
+Ho: The reduced model glm.fitless is favored over a more full model (glmfit). 
+Ha: The reduced model glm.fitless is not favored over a more full model (glm.fit). 
+
+We reject Ho. 
+With an alpha of 0.05, the results show the observed difference in model fit is statistically significant with a p-value < 2.2e-16. The evidence suggests the glm.fit "full model" is favored.
+
 
 Our final fitted model for Problem 1 is shown below.
 
@@ -372,6 +396,7 @@ Goodness of Fit: No categorical variables in our data so there is no need to do 
 
 
 ```{r Extra Logistic Reg}
+#-- Extra Log Reg Code for Ref ---
 
 # Logistics Regression
 glm.fit <- glm(Obese_Class ~ ., data = data4, family = binomial)
@@ -398,13 +423,10 @@ exp(cbind(odd = coef(glm.fit), confint(glm.fit)))
 ```
 
 
-MODEL CHECK
-
-
 
 OPEN ACTIONS: 
 
-TEAM TO REVIEW ANALYSiS (Any other goodness of fit test to do?, Add comments througout incl conclusion)
+TEAM TO REVIEW ANALYSiS (Add comments througout incl conclusion)
 
 
 
@@ -422,6 +444,7 @@ OPEN ACTIONS:
 
 
 ```{r Split Data Into Training and Test }
+
 # build a training & test data set
 samplesize=nrow(data4)
 train_percent = .8
