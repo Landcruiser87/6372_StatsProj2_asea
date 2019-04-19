@@ -322,13 +322,7 @@ test = data4[-train_indices,] # random test data
 
 train.x <-train[,2:ncol(train)]
 train.y <-train[,1]
-```
 
-MODEL ASSUMPTIONS CHECK1
-
-We choose the receiving operating characteristic (ROC) as our first measure of classier performance.  
-
-```{r Assumption Chk1}
 
 #--glm ROC--
 glmpred<-predict(glm.fit, newdata = train.x, type = "response")
@@ -344,24 +338,6 @@ abline(a=0, b= 1) #Ref line indicating poor performance
 text(x = .25, y = .75,paste("AUC = ", round(auc.train[[1]],3), sep = ""))
 
 ```
-
-Our area under the curve (AUC) = 0.885. Since this is about 0.8 our model does a good job discriminating between obese and not obese.
-
-MODEL ASSUMPTIONS CHECK2
-
-A logistic regression model provides a better fit to the data if it demonstrates an improvement over a model with fewer predictors. We us the likelihood ratio test. We create a model with two key predictors and compare against our final model ("full model"). 
-
-```{r Goodness of Fit2} 
-glm.fitless <- glm(Obese_Class ~ Smokers+Physically_Inactive, data=data4, family=binomial) 
-anova(glm.fit,glm.fitless, test="Chisq") 
-``` 
-
-Ho: The reduced model glm.fitless is favored over a more full model (glmfit). 
-Ha: The reduced model glm.fitless is not favored over a more full model (glm.fit). 
-
-We reject Ho. 
-With an alpha of 0.05, the results show the observed difference in model fit is statistically significant with a p-value < 2.2e-16. The evidence suggests the glm.fit "full model" is favored.
-
 
 Our final fitted model for Problem 1 is shown below.
 
@@ -396,7 +372,6 @@ Goodness of Fit: No categorical variables in our data so there is no need to do 
 
 
 ```{r Extra Logistic Reg}
-#-- Extra Log Reg Code for Ref ---
 
 # Logistics Regression
 glm.fit <- glm(Obese_Class ~ ., data = data4, family = binomial)
@@ -423,10 +398,13 @@ exp(cbind(odd = coef(glm.fit), confint(glm.fit)))
 ```
 
 
+MODEL CHECK
+
+
 
 OPEN ACTIONS: 
 
-TEAM TO REVIEW ANALYSiS (Add comments througout incl conclusion)
+TEAM TO REVIEW ANALYSiS (Any other goodness of fit test to do?, Add comments througout incl conclusion)
 
 
 
@@ -444,7 +422,6 @@ OPEN ACTIONS:
 
 
 ```{r Split Data Into Training and Test }
-
 # build a training & test data set
 samplesize=nrow(data4)
 train_percent = .8
@@ -632,4 +609,77 @@ testMSE.knn
 testMSE.ols
 ```
 
+
+
 The OLS method has the lowest MSE of 1.970053.
+
+```{r knn}
+library(class)
+
+data$Premature_Death_Rate <- with(data,impute(Premature_Death_Rate,median)) # may use this later so imputing now
+data$Unemployed <- with(data,impute(Unemployed,median))
+data$Uninsured <- with(data,impute(Uninsured,median))
+data$Graduation_Rate <- with(data,impute(Graduation_Rate))
+
+knn_begin <- data
+
+
+knn_begin$Unemployed <- as.numeric(knn_begin$Unemployed)
+knn_begin$Uninsured <- as.numeric(knn_begin$Uninsured)
+
+
+
+
+
+knn_lapp <- as.data.frame(lapply(knn_begin[,c(1:12,14,15)],function(x) as.numeric(x))) #Changes all of the columns to type numeric
+#knn_lapp <- cbind(knn_lapp,State = knn_begin$State) #combines the new numeric type dataframe with the State column so we have our complete dataframe
+
+
+knn_lapp <- cbind(knn_lapp, Obese_Class = data$Obese_Class) #This combines the Obese_Class into our dataframe without getting it caught in the lapply()
+
+
+knn_train <- knn_lapp[1:2500,]  #Creating the Train and test sets
+knn_test<- knn_lapp[2501:3136,]
+
+knn_train_target <- as.data.frame(knn_lapp[1:2500,15])
+
+knn_test_target <- as.data.frame(knn_lapp[2501:3136,15])
+str(knn_test_target)
+str(knn_lapp)
+
+knn_pred_50 <- as.data.frame(knn(train=knn_train,test=knn_test,cl=knn_lapp[1:2500,15],k=50))
+#We will start with k at 50, which is approximately the square root of the n,3136.
+
+comparison <- cbind(knn_test_target,Predicted = 
+                      knn_pred_50)
+colnames(comparison)<- c("TrainTarget","K50.PredictedValue")
+head(comparison)
+
+
+comparison.test <- comparison  #Changing the two variables to numeric allows us to calculate
+                               #How accurate our knn model was
+comparison.test$TrainTarget <- as.numeric(comparison.test$TrainTarget)
+comparison.test$K50.PredictedValue <- as.numeric(comparison.test$K50.PredictedValue)
+head(comparison.test)
+mean(comparison.test$K50.PredictedValue)
+
+head(comparison.test)
+
+comparison.test$ErrorTerm50 <- abs(comparison.test$TrainTarget-comparison.test$K50.PredictedValue)
+
+100*(1-(mean(comparison.test$ErrorTerm50))) #This value is the percent our model was accurate in predicting the Obesity Class.  When we changed the type from factor to numeric,0 became 1 and 1 became 2.  The k=50 Model was accurate 56.29% of the time
+
+k100.PredictedValue <- as.data.frame(knn(train=knn_train,test=knn_test,cl=knn_lapp[1:2500,15],k=100))
+head(k100.PredictedValue)
+k100.PredictedValue <- as.numeric(k100.PredictedValue$`knn(train = knn_train, test = knn_test, cl = knn_lapp[1:2500, 15], k = 100)`)
+
+comparison.test <- cbind(comparison.test, k100.PredictedValue = k100.PredictedValue)
+comparison.test$ErrorTerm100 <-   (abs(comparison.test$TrainTarget-comparison.test$k100.PredictedValue))/comparison.test$TrainTarget
+
+
+100*(1-(mean(comparison.test$ErrorTerm100))) #Changing k to 100 improves our accuracy, and we now predicted the class correctly 58.1% of the time.
+
+
+
+
+```
