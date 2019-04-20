@@ -762,12 +762,12 @@ par(mfrow=c(1,1))
 plot(cv.obese$size,cv.obese$dev,type="b")
 ```
 
-```{r}
+```{r ols comparison}
 #compare normal regression, knn, and ols methods using MSE
 set.seed(123)
 index<-sample(1:3136,2500) #approx 80/20 train/test split
-train<-data[index,]
-test<-data[-index,]
+train<-datarf[index,]
+test<-datarf[-index,]
 
 train.tree<-tree(Smokers~.,train)
 summary(train.tree)
@@ -777,21 +777,15 @@ plot(cv.tree(train.tree,FUN=prune.tree,method="deviance"))
 
 testMSE<-mean((test$Smokers - predict(train.tree,newdata=test) )^2)
 
-# KNN NOT WORKING, PROD DUE TO ARRAY INDEXES
-#knn<-FNN::knn.reg(train = train[,-c(3,4)], test =test[,-c(3,4)], y = train$Smokers, k = 5)
-#testMSE.knn<-mean( ( test$Smokers-knn$pred)^2)
-
 full.fit<-lm(Smokers~.,train)
 testMSE.ols<-mean((test$Smokers-predict(full.fit,test))^2)
 
 
 testMSE
-#testMSE.knn
 testMSE.ols
 ```
 
 The OLS method has the lowest MSE of 1.823254.
-
 
 We will use KNN as another model
 
