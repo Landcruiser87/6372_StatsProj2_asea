@@ -454,9 +454,7 @@ Beta5 = -0.08458 with a 95% CI (-0.1048, -0.0647) The coefficient for Physically
 #odds ratio
 exp(cbind(odd = coef(logreg.fit4), confint(logreg.fit4)))
 
-#variance
-round(cov(data4[2:6]), 2) 
-sum(diag(cov(data4[2:6]))) # total variance
+
 
 #--NOT WORKING--
 #logreg.pred4 <- logreg.fit4 %>% predict(train4, type = "response")
@@ -547,27 +545,32 @@ data$Obese_Class <- as.factor(as.character(data$Obese_Class))
 data <- data[,-c(2,10,15:20)]
 
 # print data before outlier removal
-#plot(data$Unemployed)
-#plot(data$Severe_Housing_Problems)
+plot(data$Unemployed)
+plot(data$Severe_Housing_Problems)
 
 # remove outliers
-data <- data[!rowSums(data[-c(1:9,11:13)] > 20),]  # removed unemployment outliers for migrant farming counties
+data <- data[!rowSums(data[-c(1:9,10:13)] > 20),]  # removed unemployment outliers for migrant farming counties
 data <- data[!rowSums(data[-c(1:10,12:13)] > 50),] # removed housing prob outliers for poor Alaska counties
 
 # print data after outlier removal
-#plot(data$Unemployed)
-#plot(data$Severe_Housing_Problems)
+plot(data$Unemployed)
+plot(data$Severe_Housing_Problems)
 
 # impute variables with their medians, prefer medians in the event there is any skew
 data$Unemployed <- with(data,impute(Unemployed,median))
 data$Uninsured <- with(data,impute(Uninsured,median))
 
+#variance
+round(cov(data[1:12]), 2) 
+sum(diag(cov(data[1:12]))) # total variance
+
+
 # split data into train and test
-samplesize=nrow(data4)
-train_percent = .75
+samplesize=nrow(data)
+train_percent = .8
 train_indices = sample(seq(1,samplesize,length = samplesize),train_percent*samplesize) # get random indices
-train = data4[train_indices,] # random training data 
-test = data4[-train_indices,] # random test data 
+train = data[train_indices,] # random training data 
+test = data[-train_indices,] # random test data 
 
 lda <- lda(Obese_Class~.,data = train)
 qda <- qda(Obese_Class~.,data = train)
@@ -582,19 +585,51 @@ qda_prd<-predict(qda, newdata = test)$class
 qda_cm<-table(qda_prd,test$Obese_Class)
 qda_cm
 
-#lda overall misclassification rrror rate
-lda_ME<-(lda_cm[2,1]+lda_cm[1,2])/(lda_cm[1,2]+lda_cm[2,2])
-lda_ME
+#This is specific to our problem statement, will vary for other situations
+lda_TP = lda_cm[2,2]
+lda_TN = lda_cm[1,1]
+lda_FP = lda_cm[2,1]
+lda_FN = lda_cm[1,2]
 
-#lda Overall Accuracy
-1-lda_ME
+#lda overall accuracy
+lda_ACC<-(lda_TP+lda_TN)/(lda_TP+lda_TN+lda_FP+lda_FN)
+print("LDA")
+paste("Accuracy:",format(lda_ACC,digits=3))
 
-#qda overall misclassification rrror rate
-qda_ME<-(qda_cm[2,1]+qda_cm[1,2])/(qda_cm[1,2]+qda_cm[2,2])
-qda_ME
+#lda misclassification error rate
+paste("Missclassification Err Rate:", format(1-lda_ACC,digits=3))
 
-#qda Overall Accuracy
-1-qda_ME
+#lda sensitivity
+lda_SNS<-lda_TP/(lda_TP+lda_FN)
+paste("Sensitivity:", format(lda_SNS,digits=3))
+
+#lda specificity
+lda_SPC<-lda_TN/(lda_TN+lda_FP)
+paste("Specificity:", format(lda_SPC,digits=3))
+
+
+
+#This is specific to our problem statement, will vary for other situations
+qda_TP = qda_cm[2,2]
+qda_TN = qda_cm[1,1]
+qda_FP = qda_cm[2,1]
+qda_FN = qda_cm[1,2]
+
+#qda overall accuracy
+qda_ACC<-(qda_TP+qda_TN)/(qda_TP+qda_TN+qda_FP+qda_FN)
+print("QDA")
+paste("Accuracy:",format(qda_ACC,digits=3))
+
+#qda misclassification error rate
+paste("Missclassification Err Rate:", format(1-qda_ACC,digits=3))
+
+#qda sensitivity
+qda_SNS<-qda_TP/(qda_TP+qda_FN)
+paste("Sensitivity:", format(qda_SNS,digits=3))
+
+#qda specificity
+qda_SPC<-qda_TN/(qda_TN+qda_FP)
+paste("Specificity:", format(qda_SPC,digits=3))
 
 #--lda ROC--
 ldaprd<-predict(lda, newdata = train)$posterior
