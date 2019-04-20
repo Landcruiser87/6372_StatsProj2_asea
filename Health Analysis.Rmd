@@ -530,7 +530,7 @@ confusionMatrix(logreg.pred,test$Obese_Class)
 ```
 
 
-```{r Steve LDA}
+```{r LDA and QDA}
 # reset dataset
 data <- read.csv("./Data/CHR_Data.csv")
 
