@@ -785,8 +785,6 @@ testMSE
 testMSE.ols
 ```
 
-The OLS method has the lowest MSE of 1.823254.
-
 We will use KNN as another model
 
 ```{r knn}
