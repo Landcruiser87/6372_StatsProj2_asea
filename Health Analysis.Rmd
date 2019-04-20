@@ -686,7 +686,7 @@ plot(cv.obese$size,cv.obese$dev,type="b")
 ```{r}
 #compare normal regression, knn, and ols methods using MSE
 set.seed(123)
-index<-sample(1:3136,1568)
+index<-sample(1:3136,2500) #approx 80/20 train/test split
 train<-data[index,]
 test<-data[-index,]
 
@@ -711,7 +711,7 @@ testMSE
 testMSE.ols
 ```
 
-The OLS method has the lowest MSE of 1.970053.
+The OLS method has the lowest MSE of 1.823254.
 
 
 We will use KNN as another model
