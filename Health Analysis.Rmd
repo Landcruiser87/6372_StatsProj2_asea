@@ -15,12 +15,19 @@ library(ggplot2)
 library(ROCR)
 library(MASS)
 library(corrplot)
-library(randomForest)
 library(epitools)
 library(dplyr)
 library(glmnet)
 library(ResourceSelection)
 library(caret)
+# tree libs
+library(rgl)
+library(tree)
+library(ISLR)
+library(randomForest)
+# parallel processing
+library(parallel)
+library(doParallel)
 ```
 
 ----Data Set Notes----
@@ -524,6 +531,38 @@ confusionMatrix(logreg.pred,test$Obese_Class)
 
 
 ```{r Steve LDA}
+# reset dataset
+data <- read.csv("./Data/CHR_Data.csv")
+
+# remove the id numbers, need to remove the state and county because that doesn't work with trees
+# remove Premature_Death_Rate since we are interesting in "living type" predictors
+data <- data[,-c(1:3,4)]
+
+# create obese binary classification where BMI >= 30 is considered Obese, 0 = not obese, 1 = obese
+data$Obese_Class <- "Obese"
+data[data$Obese < 30, "Obese_Class"] <- "Not Obese"
+data$Obese_Class <- as.factor(as.character(data$Obese_Class))
+
+# remove numeric obese, and ethnic variables
+data <- data[,-c(2,10,15:20)]
+
+# print data before outlier removal
+#plot(data$Unemployed)
+#plot(data$Severe_Housing_Problems)
+
+# remove outliers
+data <- data[!rowSums(data[-c(1:9,11:13)] > 20),]  # removed unemployment outliers for migrant farming counties
+data <- data[!rowSums(data[-c(1:10,12:13)] > 50),] # removed housing prob outliers for poor Alaska counties
+
+# print data after outlier removal
+#plot(data$Unemployed)
+#plot(data$Severe_Housing_Problems)
+
+# impute variables with their medians, prefer medians in the event there is any skew
+data$Unemployed <- with(data,impute(Unemployed,median))
+data$Uninsured <- with(data,impute(Uninsured,median))
+
+# split data into train and test
 samplesize=nrow(data4)
 train_percent = .75
 train_indices = sample(seq(1,samplesize,length = samplesize),train_percent*samplesize) # get random indices
@@ -592,31 +631,27 @@ text(x = .25, y = .75,paste("AUC = ", round(auc.train[[1]],3), sep = ""))
 
 ```{r Rando_Forrest}
 #have to reimport and reimpute some data.  Annoying, apologies.
-datarf <- alldata[-c(1:4,6,18:24)]
+datarf <- alldata[-c(1:4,18:24)]
 datarf$Unemployed <- with(datarf,impute(Unemployed,median))
 datarf$Uninsured <- with(datarf,impute(Uninsured,median))
-datarf$Graduation_Rate <- with(data,impute(Graduation_Rate))
+datarf$Graduation_Rate <- with(datarf,impute(Graduation_Rate,median))
 
-datarf$Obese_Class <- 1
-datarf[datarf$Obese < 30, "Obese_Class"] <- 0
+# create obese binary classification where BMI >= 30 is considered Obese, 0 = not obese, 1 = obese
+datarf$Obese_Class <- "Obese"
+datarf[datarf$Obese < 30, "Obese_Class"] <- "Not Obese"
 datarf$Obese_Class <- as.factor(as.character(datarf$Obese_Class))
+datarf <- datarf[,-2] # remove numeric Obese
 
 # na_count <-sapply(datarf, function(y) sum(length(which(is.na(y)))))
 # na_count <- data.frame(na_count)
 
 datarf <- datarf[,c(13,1:12)]
-Obsese.full.forrest <- randomForest(Obese_Class~., data=datarf, importance = TRUE)
-importance(Obsese.full.forrest) #Variable importance for placement order (Forward, Backward, Stepwise)
-varImpPlot(Obsese.full.forrest,type=1, main='Random Tree Variable Importance')
+Obese.full.forrest <- randomForest(Obese_Class~., data=datarf, importance = TRUE)
+importance(Obese.full.forrest) #Variable importance for placement order (Forward, Backward, Stepwise)
+varImpPlot(Obese.full.forrest,type=1, main='Random Tree Variable Importance')
 
 ```
 
-```{r trees setup}
-library(rgl)
-library(tree)
-library(ISLR)
-library(randomForest)
-```
 
 ```{r trees}
 # reset dataset
@@ -651,14 +686,23 @@ tunegrid <- expand.grid(.mtry=mtry)
 rf_default <- train(Obese_Class~., data=data, method="rf", metric="Accuracy", tuneGrid=tunegrid, trControl=control)
 print(rf_default)
 
+# parallel comput, requires parallel adn doParallel libraries
+# create parallel cluster, leave one out so you don't lock your computer
+cluster <- makeCluster(detectCores() - 1)
+registerDoParallel(cluster)
+
 # Random Search
-control <- trainControl(method="repeatedcv", number=10, repeats=3, search="random")
+control <- trainControl(method="repeatedcv", number=10, repeats=3, search="random", allowParallel = TRUE)
 set.seed(7)
 mtry <- sqrt(ncol(rand.x))
 # THIS TAKES FOREVER TO RUN REFER TO THE HTML UNLESS U NEED A STUDY BREAK :)
-#rf_random <- train(Obese_Class~., data=data, method="rf", metric="Accuracy", tuneLength=15, trControl=control)
-# print(rf_random)
-# plot(rf_random)
+rf_random <- train(Obese_Class~., data=data, method="rf", metric="Accuracy", tuneLength=15, trControl=control)
+print(rf_random)
+plot(rf_random)
+
+# stop the cluster and force R back to 1 core
+stopCluster(cluster)
+registerDoSEQ()
 #---------------
 
 #attach(data)
