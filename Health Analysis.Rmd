@@ -675,12 +675,12 @@ This tree shows that Frequent Physical Distress is a main split point for premat
 ```{r}
 #cross validation tree
 set.seed(3)
-cv.adver=cv.tree(mytree,FUN=prune.tree,method="deviance")
-names(cv.adver)
-cv.adver
-plot(cv.adver)
+cv.obese=cv.tree(mytree,FUN=prune.tree,method="deviance")
+names(cv.obese)
+cv.obese
+plot(cv.obese)
 par(mfrow=c(1,1))
-plot(cv.adver$size,cv.adver$dev,type="b")
+plot(cv.obese$size,cv.obese$dev,type="b")
 ```
 
 ```{r}
