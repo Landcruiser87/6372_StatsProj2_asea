@@ -744,12 +744,27 @@ registerDoSEQ()
 ```
 
 ```{r deep tree}
-mytree <- tree(Smokers~., data)
+mytree <- tree(Smokers~., datarf)
 plot(mytree)
 text(mytree,pretty=0)
 ```
 
 This tree shows that Frequent Physical Distress is a main split point for premature deaths.
+
+```{r pretty tree setup}
+library(rpart)
+library(rattle)
+library(rpart.plot)
+library(RColorBrewer)
+library(party)
+library(partykit)
+```
+
+```{r pretty tree}
+form <- as.formula(Obese_Class ~.)
+tree.1 <- rpart(form,datarf)
+fancyRpartPlot(tree.1, cex=0.65)
+```
 
 ```{r}
 #cross validation tree
