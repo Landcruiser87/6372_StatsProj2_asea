@@ -19,7 +19,17 @@ library(randomForest)
 library(epitools)
 library(dplyr)
 library(glmnet)
+library(ResourceSelection)
+library(caret)
 ```
+
+----Data Set Notes----
+data  = imputed, no outliers
+data2 = same as data but moved Obese_Class to the beginning
+data3 = removed highly correlated variable
+data4 = removed insignificant variables per logistic regression
+----------------------
+
 
 The national dataset used in this study comes from the 2017 County Health Rankings website. Since each state and county have varying populations, we chose to use the data as a percent of the population. The death rate is the age-adjusted Years of Potential Life Lost rate per 100,000. All variables are continuous so we do not need to be concerned about unbalanced categorical variables.
 
@@ -51,7 +61,7 @@ alldata = read.csv("./Data/CHR_Data.csv")
 
 # get initial data
 data <- alldata[,-c(1:3,4,14,18:24)]
-datarf <- alldata[,-c(1:4,6)]
+
 # show data summary to identify variables with missing data
 summary(data)
 ```
@@ -62,7 +72,6 @@ The summary statistics show missing values for Premature_Death_Rate, Unemployed,
 # impute variables with their medians, prefer medians in the event there is any skew
 data$Unemployed <- with(data,impute(Unemployed,median))
 data$Uninsured <- with(data,impute(Uninsured,median))
-
 ```
 
 EDA-SKEW 
@@ -92,7 +101,7 @@ plot(data$Unemployed)
 plot(data$Severe_Housing_Problems)
 
 data <- data[!rowSums(data[c(-1:-10,-12)] > 20),] # removed unemployment outliers for migrant farming counties
-data <- data[!rowSums(data[c(-1:-11)] > 50),] # removed housing prob outliers for poor Alaska counties
+data <- data[!rowSums(data[c(-1:-11)] > 50),]     # removed housing prob outliers for poor Alaska counties
 
 # print data after outlier removal
 plot(data$Unemployed)
@@ -101,13 +110,12 @@ plot(data$Severe_Housing_Problems)
 
 ```{r EDA Scatter Plots}
 # create obese binary classification where BMI >= 30 is considered Obese, 0 = not obese, 1 = obese
-data$Obese_Class <- 1
-data[data$Obese < 30, "Obese_Class"] <- 0
+data$Obese_Class <- "Obese"
+data[data$Obese < 30, "Obese_Class"] <- "Not Obese"
 data$Obese_Class <- as.factor(as.character(data$Obese_Class))
 
 # -- create new data set with obese_class first --
 data2 <- data[,c(13,1,3:12)]
-
 
 # summary stats by group Obese_Class, to add to SAS Box Plots
 t(aggregate(Smokers~Obese_Class,data=data2,summary))
@@ -291,9 +299,22 @@ The PCA plots show some separation but not great separation. We should still be 
 
 For our model, we choose a logistic regression using LASSO for feature reduction.
 
+```{r Create Train and Test for Data3}
+# build a training & test data set, match train/test idx to data idx for debug tracking
+samplesize=nrow(data3)
+train_percent = .8
+train_indices = sample(seq(1,samplesize,length = samplesize),train_percent*samplesize) # get random indices
+train3 = data3[train_indices,] # random training data
+test3 = data3[-train_indices,] # random test data
+
+train3.x <-train3[,2:ncol(train3)]
+train3.y <-train3[,1]
+```
+
 ```{r First Pass Prob1 Log Regress}
-glm.fit <- glm(Obese_Class ~ ., data = data3, family = binomial)
-summary(glm.fit)
+# Perform on all data
+glm.fit1 <- glm(Obese_Class ~ ., data = data3, family = binomial)
+summary(glm.fit1)
 ```
 
 After different assessments and iterations, we agree with removing the following suggested insignificant predictors:
@@ -308,28 +329,41 @@ After different assessments and iterations, we agree with removing the following
 data4 <- data3[,-c(4,7,9:11)]
 ```
 
-Rerun the model with signifcant predictor.
+```{r Create Train and Test for Data4}
+# build a training & test data set, match train/test idx to data idx for debug tracking
+# using same split and indices used in train3/test3
+samplesize=nrow(data3)
+train4 = data4[train_indices,] # random training data
+test4 = data4[-train_indices,] # random test data
+
+train4.x <-train4[,2:ncol(train4)]
+train4.y <-train4[,1]
+
+# checking group proportions for training bias, should see similar proportions of 0s & 1s in each
+proportion <- rbind(table(train4$Obese_Class),table(test4$Obese_Class))
+dimnames(proportion)<- list("Data Set"=c("Train","Test"), "Obese_Class"=c("Not obese","Obese"))
+proportion
+```
+
+Rerun the model with only signifcant predictors.
 
 ```{r Final Prob1 Log Regress}
-glm.fit <- glm(Obese_Class ~ ., data = data4, family = binomial)
-summary(glm.fit)
-confint(glm.fit)
+# match fit idx to data idx for debug tracking
+logreg.fit4 <- glm(Obese_Class ~ ., data = data4, family = binomial)
+summary(logreg.fit4)
+confint(logreg.fit4)
+```
 
-# build a training & test data set
-samplesize=nrow(data4)
-train_percent = .8
-train_indices = sample(seq(1,samplesize,length = samplesize),train_percent*samplesize) # get random indices
-train = data4[train_indices,] # random training data
-test = data4[-train_indices,] # random test data
+MODEL ASSUMPTIONS CHECK1
 
-train.x <-train[,2:ncol(train)]
-train.y <-train[,1]
+We choose the receiving operating characteristic (ROC) as our first measure of classier performance.  
 
+```{r Goodness of Fit Chk1}
 
 #--glm ROC--
-glmpred<-predict(glm.fit, newdata = train.x, type = "response")
+logreg.pred4<-predict(logreg.fit4, newdata = train4.x, type = "response")
 
-pred <- prediction(glmpred, train.y)
+pred <- prediction(logreg.pred4, train4.y)
 roc.perf = performance(pred, measure = "tpr", x.measure = "fpr")
 auc.train <- performance(pred, measure = "auc")
 auc.train <- auc.train@y.values
@@ -340,6 +374,46 @@ abline(a=0, b= 1) #Ref line indicating poor performance
 text(x = .25, y = .75,paste("AUC = ", round(auc.train[[1]],3), sep = ""))
 
 ```
+
+Our area under the curve (AUC) = 0.885. Since this is about 0.8 our model does a good job discriminating between obese and not obese.
+
+MODEL ASSUMPTIONS CHECK2
+
+A logistic regression model provides a better fit to the data if it demonstrates an improvement over a model with fewer predictors. We us the likelihood ratio test. We create a model with two key predictors and compare against our final model ("full model"). 
+
+```{r Goodness of Fit Chk2} 
+logreg.fitless4 <- glm(Obese_Class ~ Smokers+Physically_Inactive, data=data4, family=binomial) # reduced model
+anova(logreg.fit4,logreg.fitless4, test="Chisq")
+``` 
+
+Ho: The reduced model is favored over a more full model. 
+Ha: The reduced model is not favored over a more full model. 
+
+We reject Ho. 
+With an alpha of 0.05, the results show the observed difference in model fit is statistically significant with a p-value < 2.2e-16. The evidence suggests the glm.fit "full model" is favored.
+
+
+```{r Goodness of Fit Ch3}
+hoslem.test(logreg.fit4$y, fitted(logreg.fit4), g=10)
+```
+
+Ho: The model fits the data.
+Ha: The model does not fit the data.
+Applying the Hosmer-Lemeshow Test, we fail the reject the null hypothesis with a p-value > 0.3217.
+
+```{r Goodness of Fit4}
+# McFadden's Pseudo R-squared
+ll.null <- logreg.fit4$null.deviance/-2  
+ll.proposed <- logreg.fit4$deviance/-2
+
+(ll.null - ll.proposed) / ll.null  # the R-squared is basically the overall effect size
+
+1-pchisq(2*(ll.proposed - ll.null),df=(length(logreg.fit4$coefficients)-1))
+
+```
+
+The R-squared shown is basically the overall effect size. The p-value is very small so the R-squared isn't due to chance. 
+
 
 Our final fitted model for Problem 1 is shown below.
 
@@ -354,60 +428,40 @@ We reject the null hypothesis with multiple predictors having p-values < 0.05.
 
 There is sufficient evidence at teh alpha = 0.05 level of significance to suggest 
 
-Beta0 = -10.1812 with 95% CI (-11.1835,-9.2105)
-The odds of being obese with all variables =t 0 is exp(-10.1812)=0.000038.
+Beta0 = -9.3913 with 95% CI (-10.3303, -8.4885) The odds of being obese with all variables =t 0 is exp(-9.3913)=0.000083.
 
-Beta1 = 0.42933 with a 95% CI (0.37007,0.49044)
-This fitted model says, holding all other variables constant, the odds of being obese for smokers is exp(0.42933)=1.5362 over the odds of not being obese. In terms of percent change, the odds for being obese are 53.62% higher than the odds for not being obese.
+Beta1 = 0.3986 with a 95% CI (0.3349, 0.46) This fitted model says, holding all other variables constant, the odds of being obese for smokers is exp(0. 3986)=1.4898 over the odds of not being obese. In terms of percent change, the odds for being obese are 48.98% higher than the odds for not being obese.
 
-Beta2 = 0.26783 with a 95% CI (0.23894, 0.29762)
-The coefficient for Physically_Inactive, holding all other variables constant, says the odds of being obese is exp(0.26783)=1.3071 over the odds of not being obese. In terms of percent change, the odds for being obese are 30.71% higher than the odds for not being obese. 
+Beta2 = 0.2066 with a 95% CI (0.171, 0.243) The coefficient for Physically_Inactive, holding all other variables constant, says the odds of being obese is exp(0. 2066)=1.2295 over the odds of not being obese. In terms of percent change, the odds for being obese are 22.95% higher than the odds for not being obese.
 
-Beta3 = -0.37621 with a 95% CI (0.-45264, -0.302)
-The coefficient for Physically_Inactive, holding all other variables constant, says the odds of being obese is exp(-0.37621)=0.6865 over the odds of not being obese. In terms of percent change, the odds for being obese are 31.35% lower than the odds for not being obese. 
+Beta3 = -0.3916 with a 95% CI (0.-4983, -0.2867) The coefficient for Physically_Inactive, holding all other variables constant, says the odds of being obese is exp(-0.3916)=0.676 over the odds of not being obese. In terms of percent change, the odds for being obese are 32.40% lower than the odds for not being obese.
 
-Beta4 = 0.03314 with a 95% CI (0.00246, 0.06386)
-The coefficient for Physically_Inactive, holding all other variables constant, says the odds of being obese is exp(0.03314)=1.0337 over the odds of not being obese. In terms of percent change, the odds for being obese are 3.37% higher than the odds for not being obese. 
+Beta4 = 0.3434 with a 95% CI (0.2711, 0.4171) The coefficient for Physically_Inactive, holding all other variables constant, says the odds of being obese is exp(0.3434)=1.4098 over the odds of not being obese. In terms of percent change, the odds for being obese are 40.98% higher than the odds for not being obese.
 
-Goodness of Fit: No categorical variables in our data so there is no need to do a Chi Square test.
-
+Beta5 = -0.08458 with a 95% CI (-0.1048, -0.0647) The coefficient for Physically_Inactive, holding all other variables constant, says the odds of being obese is exp(0.08458)=0.9189 over the odds of not being obese. In terms of percent change, the odds for being obese are 8.11% higher than the odds for not being obese.
 
 
 ```{r Extra Logistic Reg}
-
-# Logistics Regression
-glm.fit <- glm(Obese_Class ~ ., data = data4, family = binomial)
-summary(glm.fit)
-
-#Confidence Intervals
-confint.default(glm.fit) #Wald
-confint(glm.fit) #Profile
+#-- Extra Log Reg Code for Ref ---
 
 #odds ratio
-exp(cbind(odd = coef(glm.fit), confint(glm.fit)))
+exp(cbind(odd = coef(logreg.fit4), confint(logreg.fit4)))
 
-#checking group proportions
-#proportion <- rbind(table(train$Obese_Class),table(test$Obese_Class))
-#dimnames(proportion)<- list("Data Set"=c("Train","Test"), "Obese_Class"=c("Not obese","Obese"))
-#proportion
+#variance
+round(cov(data4[2:6]), 2) 
+sum(diag(cov(data4[2:6]))) # total variance
 
-
-#Model prediction/Accuracy
-#glm.pred <- glm.fit %>% predict(train, type = "response")
-#predicted.classes <-ifelse(glm.pred < 0.3, 0, 1)
-#observed.classes <- test$Obese_Class
+#--NOT WORKING--
+#logreg.pred4 <- logreg.fit4 %>% predict(train4, type = "response")
+#predicted.classes <-ifelse(logreg.pred4 < 0.3, 0, 1)
+#observed.classes <- test4$Obese_Class
 #mean(predicted.classes == observed.classes)
+
 ```
-
-
-MODEL CHECK
-
-
 
 OPEN ACTIONS: 
 
-TEAM TO REVIEW ANALYSiS (Any other goodness of fit test to do?, Add comments througout incl conclusion)
-
+TEAM TO REVIEW ANALYSiS (Add comments througout incl conclusion)
 
 
 ========================================================================================
@@ -416,57 +470,65 @@ OBJECTIVE 2:
 
 With a simple logistic regression model as a baseline, perform additional competing models to improve on prediction performance metrics.
 
-OPEN ACTIONS:
-1. Do a train/test split on the Prob1 model and get Accuracy/Specificity (data set = data4). Now we have a baseline to compare.
-2. Add an interactive term (alcohol x smoking, mental stress x unemployed ) and rerun the model to compare to the baseline and comment.
-3. Run the KNN model to compare
-4. Run Random Forrest to compare
+First, we obtain our metrics for our base model. We performed a 10-fold cross validation. Figure 20 shows the confusion matrix for the base model. The overall accuracy is at 65.22% with a misclassification error rate of 34.78%In order We performed a 10-fold Cross Validation to 
 
+```{r Log Regression Model for Main Model}
 
-```{r Split Data Into Training and Test }
-# build a training & test data set
-samplesize=nrow(data4)
+# Set desired data set
+train=train4
+test=test4
+
+# 10 fold cv
+control <- trainControl(method = "cv", number = 10, savePredictions = TRUE)
+
+# Model
+logreg.fit <- train(Obese_Class ~ ., data=train, method="glm", family=binomial(),trControl=control)
+logreg.fit
+
+# predict on test
+logreg.pred <- predict(logreg.fit,test)
+
+# results
+confusionMatrix(logreg.pred,test$Obese_Class)
+
+```
+
+Let's add an interactive term to see if we can improve the model. We will add the "partiers", Smokers*Excessive_Drinking with mean Execessive_Drinking will also be added back to the model. So our complex model is shown below.
+
+log(p/(1-p)) = logit(p) = B0 + B1(Smokers) + B2(Physically_Inactive) + B3(Frequent_Mental_Distress) + B4(Diabetic) + B5(Uninsured) + B6(Excessive_Drinking) + B7(Smokers*Excessive_Drinking)
+
+```{r Log Regression Model for Prediction-Complex }
+# Add Excessive Drinking to a New Data Set
+data5 <- data3[,-c(7,9:11)]
+
+# build a training & test data set with complex model data
+samplesize=nrow(data5)
 train_percent = .8
 train_indices = sample(seq(1,samplesize,length = samplesize),train_percent*samplesize) # get random indices
-train = data3[train_indices,] # random training data
-test = data3[-train_indices,] # random test data
+train = data5[train_indices,] # random training data
+test = data5[-train_indices,] # random test data
 
-# check train & test for training bias, shoudl see similar proportions of 0s & 1s in each
-summary(train$Obese_Class)
-summary(test$Obese_Class)
+# 10 fold cv
+control <- trainControl(method = "cv", number = 10, savePredictions = TRUE)
 
-train.x <- train[,2:ncol(train)]
-train.y <- train[,1] # Obese_Class is in column 1
+# Model
+logreg.fit <- train(Obese_Class ~ ., data=train, method="glm", family=binomial(),trControl=control)
+logreg.fit
+
+# predict on test
+logreg.pred <- predict(logreg.fit,test)
+
+# results
+confusionMatrix(logreg.pred,test$Obese_Class)
 ```
 
-
-```{r Log Regression Model for Prediction}
-train.x <- as.matrix(train.x) # glmnet requires a matrix 
-cvfit <- cv.glmnet(train.x, train.y, family = "binomial", type.measure = "class", nlambda = 1000)
-plot(cvfit)
-coef(cvfit, s = "lambda.min")
-
-# predicted probabilities from logistic model  exp(b)/(1+exp(b))
-fit.pred <- predict(cvfit, newx = train.x, type = "response")
-
-#Compare the prediction to the real outcome
-head(fit.pred)
-head(train.y)
-```
-
-NOT SURE WE NEED THIS
-Get Variance Stats
-```{r Variance}
-round(cov(data4[2:6]), 2) 
-sum(diag(cov(data4[2:6]))) # total variance
-```
 
 ```{r Steve LDA}
 samplesize=nrow(data4)
 train_percent = .75
 train_indices = sample(seq(1,samplesize,length = samplesize),train_percent*samplesize) # get random indices
-train = data3[train_indices,] # random training data 
-test = data3[-train_indices,] # random test data 
+train = data4[train_indices,] # random training data 
+test = data4[-train_indices,] # random test data 
 
 lda <- lda(Obese_Class~.,data = train)
 qda <- qda(Obese_Class~.,data = train)
@@ -529,20 +591,19 @@ text(x = .25, y = .75,paste("AUC = ", round(auc.train[[1]],3), sep = ""))
 ```
 
 ```{r Rando_Forrest}
-#have to reimport and reimpute some data.  Annoying, apologies.
-datarf$Unemployed <- with(datarf,impute(Unemployed,median))
-datarf$Uninsured <- with(datarf,impute(Uninsured,median))
-
-# datarf <- datarf[!rowSums(datarf[c(-1:-10,-11)] > 20),] #Unemployment outlier removal
-# datarf <- datarf[!rowSums(datarf[c(-1:-11)] > 50),] #Housing outlier removal
-datarf$Obese_Class <- 1
-datarf[datarf$Obese < 30, "Obese_Class"] <- 0
-datarf$Obese_Class <- as.factor(as.character(datarf$Obese_Class))
-
-datarf <- datarf[,c(20,1:19)]
-Obsese.full.forrest <- randomForest(Obese_Class~., data=datarf, importance = TRUE)
-importance(rf_model) #Variable importance for placement order (Forward, Backward, Stepwise)
-varImpPlot(Obsese.full.forrest,type=1, main='Random Tree Variable Importance')
+# #have to reimport and reimpute some data.  Annoying, apologies. 
+# datarf$Unemployed <- with(datarf,impute(Unemployed,median))
+# datarf$Uninsured <- with(datarf,impute(Uninsured,median))
+# datarf <- datarf[!rowSums(datarf[c(-1:-10,-13)] > 20),] 
+# datarf <- datarf[!rowSums(datarf[c(-1:-11)] > 50),] 
+# datarf$Obese_Class <- 1
+# datarf[datarf$Obese < 30, "Obese_Class"] <- 0
+# datarf$Obese_Class <- as.factor(as.character(datarf$Obese_Class))
+# 
+# datarf <- datarf[,c(25,5,7:18,24)]
+# Obsese.full.forrest <- randomForest(Obese_Class~., data=data4, importance = TRUE)
+# importance(rf_model) #Variable importance for placement order (Forward, Backward, Stepwise) 
+# varImpPlot(Obsese.full.forrest,type=1, main='Random Tree Variable Importance') 
 
 ```
 
@@ -554,26 +615,53 @@ library(randomForest)
 ```
 
 ```{r trees}
-#reset dataset
+# reset dataset
 data <- read.csv("./Data/CHR_Data.csv")
-#remove the id numbers, need to remove the state and county because that doesn't work with trees
-data <- data[,-c(1:3)]
-attach(data)
-```
 
-```{r repeat adjustment of variables}
+# remove the id numbers, need to remove the state and county because that doesn't work with trees
+# remove Premature_Death_Rate since we are interesting in "living type" predictors
+data <- data[,-c(1:3,4)]
+
+# create obese binary classification where BMI >= 30 is considered Obese, 0 = not obese, 1 = obese
+data$Obese_Class <- "Obese"
+data[data$Obese < 30, "Obese_Class"] <- "Not Obese"
+data$Obese_Class <- as.factor(as.character(data$Obese_Class))
+
 # impute variables with their medians, prefer medians in the event there is any skew
-data$Premature_Death_Rate <- with(data,impute(Premature_Death_Rate,median)) # may use this later so imputing now
 data$Unemployed <- with(data,impute(Unemployed,median))
 data$Uninsured <- with(data,impute(Uninsured,median))
 data$Graduation_Rate <- with(data,impute(Graduation_Rate))
 
-# rescale Premature_Death_Rate so min value = 2.947 vs 2947, just a preference so it's not scaled so diff from predictors
-data$Premature_Death_Rate <- data$Premature_Death_Rate/1000
+# remove numeric obese
+data <- data[,-2]
+
+#----Steve's----
+rand.x <- data[,c(1:19)]
+rand.y <- data[,20]
+
+# Create model with default paramters
+control <- trainControl(method="repeatedcv", number=10, repeats=3)
+set.seed(7)
+mtry <- sqrt(ncol(rand.x))
+tunegrid <- expand.grid(.mtry=mtry)
+rf_default <- train(Obese_Class~., data=data, method="rf", metric="Accuracy", tuneGrid=tunegrid, trControl=control)
+print(rf_default)
+
+# Random Search
+control <- trainControl(method="repeatedcv", number=10, repeats=3, search="random")
+set.seed(7)
+mtry <- sqrt(ncol(rand.x))
+# THIS TAKES FOREVER TO RUN REFER TO THE HTML UNLESS U NEED A STUDY BREAK :)
+#rf_random <- train(Obese_Class~., data=data, method="rf", metric="Accuracy", tuneLength=15, trControl=control)
+print(rf_random)
+plot(rf_random)
+#---------------
+
+#attach(data)
 ```
 
 ```{r deep tree}
-mytree <- tree(Premature_Death_Rate~., data)
+mytree <- tree(Smokers~., data)
 plot(mytree)
 text(mytree,pretty=0)
 ```
@@ -598,70 +686,126 @@ index<-sample(1:3136,1568)
 train<-data[index,]
 test<-data[-index,]
 
-train.tree<-tree(Premature_Death_Rate~.,train)
+train.tree<-tree(Smokers~.,train)
 summary(train.tree)
 plot(train.tree)
 text(train.tree,pretty=0)
 plot(cv.tree(train.tree,FUN=prune.tree,method="deviance"))
 
-testMSE<-mean((test$Premature_Death_Rate - predict(train.tree,newdata=test) )^2)
+testMSE<-mean((test$Smokers - predict(train.tree,newdata=test) )^2)
 
+# KNN NOT WORKING, PROD DUE TO ARRAY INDEXES
+#knn<-FNN::knn.reg(train = train[,-c(3,4)], test =test[,-c(3,4)], y = train$Smokers, k = 5)
+#testMSE.knn<-mean( ( test$Smokers-knn$pred)^2)
 
-knn<-FNN::knn.reg(train = train[,-c(3,4)], test =test[,-c(3,4)], y = train$Premature_Death_Rate, k = 5)
-testMSE.knn<-mean( ( test$Premature_Death_Rate-knn$pred)^2)
-
-full.fit<-lm(Premature_Death_Rate~.,train)
-testMSE.ols<-mean((test$Premature_Death_Rate-predict(full.fit,test))^2)
+full.fit<-lm(Smokers~.,train)
+testMSE.ols<-mean((test$Smokers-predict(full.fit,test))^2)
 
 
 testMSE
-testMSE.knn
+#testMSE.knn
 testMSE.ols
 ```
 
-
-
 The OLS method has the lowest MSE of 1.970053.
+
+
+We will use KNN as another model
 
 ```{r knn}
 library(class)
 
-data$Premature_Death_Rate <- with(data,impute(Premature_Death_Rate,median)) # may use this later so imputing now
+#---reset dataset---
+data <- read.csv("./Data/CHR_Data.csv")
+#remove the id numbers, need to remove the state and county because that doesn't work with trees
+data <- data[,-c(1:3)]
+
+#impute for missing values previously identified in EDA
 data$Unemployed <- with(data,impute(Unemployed,median))
 data$Uninsured <- with(data,impute(Uninsured,median))
 data$Graduation_Rate <- with(data,impute(Graduation_Rate))
 
+# create obese binary classification where BMI >= 30 is considered Obese, 0 = not obese, 1 = obese
+data$Obese_Class <- "Obese"
+data[data$Obese < 30, "Obese_Class"] <- "Not Obese"
+data$Obese_Class <- as.factor(as.character(data$Obese_Class))
+
+# remove Premature_Death_Rate since we are interesting in "living type" predictors, remove numeric obese data
+data <- data[,-c(1,3)] 
+
+# set impute cols to numeric
+data$Unemployed <- as.numeric(data$Unemployed)
+data$Uninsured <- as.numeric(data$Uninsured)
+data$Graduation_Rate <- as.numeric(data$Graduation_Rate)
+
+# normalize data with lapply
+data_norm <- data
+num.vars <- sapply(data_norm,is.numeric)
+data_norm[num.vars] <- lapply(data_norm[num.vars], scale)
+
+#summary(data_norm[1:19])
+#------------------
+# build a training & test data set
+samplesize=nrow(data_norm)
+train_percent = .7
+train_indices = sample(seq(1,samplesize,length = samplesize),train_percent*samplesize) # get random indices
+knn_train = data_norm[train_indices,] # random training data
+knn_test = data_norm[-train_indices,] # random test data
+
+# checking group proportions for training bias, should see similar proportions of 0s & 1s in each
+proportion <- rbind(table(knn_train$Obese_Class),table(knn_test$Obese_Class))
+dimnames(proportion)<- list("Data Set"=c("Train","Test"), "Obese_Class"=c("Not obese","Obese"))
+proportion
+
+
+knn.5 = class::knn(knn_train[,c(1:19)],knn_test[,c(1:19)],knn_train$Obese_Class,k=5)
+knn_test$ObesePred = knn.5
+confusionMatrix(table(knn_test$Obese_Class,knn_test$ObesePred))
+
+knn.10 = class::knn(knn_train[,c(1:19)],knn_test[,c(1:19)],knn_train$Obese_Class,k=10)
+knn_test$ObesePred = knn.10
+confusionMatrix(table(knn_test$Obese_Class,knn_test$ObesePred))
+
+knn.20 = class::knn(knn_train[,c(1:19)],knn_test[,c(1:19)],knn_train$Obese_Class,k=20)
+knn_test$ObesePred = knn.20
+confusionMatrix(table(knn_test$Obese_Class,knn_test$ObesePred))
+
+knn.50 = class::knn(knn_train[,c(1:19)],knn_test[,c(1:19)],knn_train$Obese_Class,k=50)
+knn_test$ObesePred = knn.50
+confusionMatrix(table(knn_test$Obese_Class,knn_test$ObesePred))
+
+# knn.20 seems be the sweet spot but not by much
+
+#---------
+
+# COMMENTING OUT
+if (FALSE){
 knn_begin <- data
-
-
-knn_begin$Unemployed <- as.numeric(knn_begin$Unemployed)
-knn_begin$Uninsured <- as.numeric(knn_begin$Uninsured)
-
-
-
 
 
 knn_lapp <- as.data.frame(lapply(knn_begin[,c(1:12,14,15)],function(x) as.numeric(x))) #Changes all of the columns to type numeric
 #knn_lapp <- cbind(knn_lapp,State = knn_begin$State) #combines the new numeric type dataframe with the State column so we have our complete dataframe
 
-
 knn_lapp <- cbind(knn_lapp, Obese_Class = data$Obese_Class) #This combines the Obese_Class into our dataframe without getting it caught in the lapply()
-
 
 knn_train <- knn_lapp[1:2500,]  #Creating the Train and test sets
 knn_test<- knn_lapp[2501:3136,]
 
 knn_train_target <- as.data.frame(knn_lapp[1:2500,15])
-
 knn_test_target <- as.data.frame(knn_lapp[2501:3136,15])
+
 str(knn_test_target)
+str(knn_train_target)
 str(knn_lapp)
 
-knn_pred_50 <- as.data.frame(knn(train=knn_train,test=knn_test,cl=knn_lapp[1:2500,15],k=50))
+knn.1 <- knn(t)
+
+knn_pred_50 <- as.data.frame(knn(train=knn_train,test=knn_test,cl=knn_train[,20],k=50))
+
+#knn_pred_50 <- as.data.frame(knn(train=knn_train,test=knn_test,cl=knn_lapp[1:2500,15],k=50))
 #We will start with k at 50, which is approximately the square root of the n,3136.
 
-comparison <- cbind(knn_test_target,Predicted = 
-                      knn_pred_50)
+comparison <- cbind(knn_test_target,Predicted = knn_pred_50)
 colnames(comparison)<- c("TrainTarget","K50.PredictedValue")
 head(comparison)
 
@@ -688,8 +832,7 @@ comparison.test$ErrorTerm100 <-   (abs(comparison.test$TrainTarget-comparison.te
 
 
 100*(1-(mean(comparison.test$ErrorTerm100))) #Changing k to 100 improves our accuracy, and we now predicted the class correctly 58.1% of the time.
-
-
-
-
+}
 ```
+
+knn.20 seems be the sweet spot but not by much
