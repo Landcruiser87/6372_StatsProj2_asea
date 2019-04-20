@@ -51,7 +51,7 @@ alldata = read.csv("./Data/CHR_Data.csv")
 
 # get initial data
 data <- alldata[,-c(1:3,4,14,18:24)]
-datarf <- alldata[,-c(1:4)]
+datarf <- alldata[,-c(1:4,6)]
 # show data summary to identify variables with missing data
 summary(data)
 ```
@@ -62,6 +62,7 @@ The summary statistics show missing values for Premature_Death_Rate, Unemployed,
 # impute variables with their medians, prefer medians in the event there is any skew
 data$Unemployed <- with(data,impute(Unemployed,median))
 data$Uninsured <- with(data,impute(Uninsured,median))
+
 ```
 
 EDA-SKEW 
@@ -528,19 +529,20 @@ text(x = .25, y = .75,paste("AUC = ", round(auc.train[[1]],3), sep = ""))
 ```
 
 ```{r Rando_Forrest}
-# #have to reimport and reimpute some data.  Annoying, apologies. 
-# datarf$Unemployed <- with(datarf,impute(Unemployed,median))
-# datarf$Uninsured <- with(datarf,impute(Uninsured,median))
-# datarf <- datarf[!rowSums(datarf[c(-1:-10,-13)] > 20),] 
-# datarf <- datarf[!rowSums(datarf[c(-1:-11)] > 50),] 
-# datarf$Obese_Class <- 1
-# datarf[datarf$Obese < 30, "Obese_Class"] <- 0
-# datarf$Obese_Class <- as.factor(as.character(datarf$Obese_Class))
-# 
-# datarf <- datarf[,c(25,5,7:18,24)]
-# Obsese.full.forrest <- randomForest(Obese_Class~., data=data4, importance = TRUE)
-# importance(rf_model) #Variable importance for placement order (Forward, Backward, Stepwise) 
-# varImpPlot(Obsese.full.forrest,type=1, main='Random Tree Variable Importance') 
+#have to reimport and reimpute some data.  Annoying, apologies.
+datarf$Unemployed <- with(datarf,impute(Unemployed,median))
+datarf$Uninsured <- with(datarf,impute(Uninsured,median))
+
+# datarf <- datarf[!rowSums(datarf[c(-1:-10,-11)] > 20),] #Unemployment outlier removal
+# datarf <- datarf[!rowSums(datarf[c(-1:-11)] > 50),] #Housing outlier removal
+datarf$Obese_Class <- 1
+datarf[datarf$Obese < 30, "Obese_Class"] <- 0
+datarf$Obese_Class <- as.factor(as.character(datarf$Obese_Class))
+
+datarf <- datarf[,c(20,1:19)]
+Obsese.full.forrest <- randomForest(Obese_Class~., data=datarf, importance = TRUE)
+importance(rf_model) #Variable importance for placement order (Forward, Backward, Stepwise)
+varImpPlot(Obsese.full.forrest,type=1, main='Random Tree Variable Importance')
 
 ```
 
