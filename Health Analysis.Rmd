@@ -714,8 +714,13 @@ data <- data[,-2]
 rand.x <- data[,c(1:19)]
 rand.y <- data[,20]
 
+#parallel compute, requires parallel and doParallel libraries
+#create parallel cluster, leave one out so you don't lock your computer
+cluster <- makeCluster(detectCores() - 1)
+registerDoParallel(cluster)
+
 # Create model with default paramters
-control <- trainControl(method="repeatedcv", number=10, repeats=3, savePredictions = "final", classProbs = T)
+control <- trainControl(method="repeatedcv", number=10, repeats=3, savePredictions = "final", classProbs = T, allowParallel = TRUE)
 #added Savepredictions, and classprobs to above
 
 samplesize=nrow(data)
@@ -735,27 +740,21 @@ print(rf_default)
 rf_default$results$Accuracy #Accuracy
 rf_default.pred <-predict(rf_default, newdata = test)
 confusionMatrix(rf_default.pred, as.factor(test$Obese_Class))
+ 
+#Random Search
+control <- trainControl(method="repeatedcv", number=10, repeats=3, search="random", allowParallel = TRUE)
+set.seed(7)
+mtry <- sqrt(ncol(rand.x))
 
-# #parallel comput, requires parallel adn doParallel libraries
-# #create parallel cluster, leave one out so you don't lock your computer
-# cluster <- makeCluster(detectCores() - 1)
-# registerDoParallel(cluster)
-# 
-# # Random Search
-# control <- trainControl(method="repeatedcv", number=10, repeats=3, search="random", allowParallel = TRUE)
-# set.seed(7)
-# mtry <- sqrt(ncol(rand.x))
-# # THIS TAKES FOREVER TO RUN REFER TO THE HTML UNLESS U NEED A STUDY BREAK :)
-# rf_random <- train(Obese_Class~., data=data, method="rf", metric="Accuracy", tuneLength=15, trControl=control)
-# print(rf_random)
-# plot(rf_random)
-# 
-# # stop the cluster and force R back to 1 core
-# stopCluster(cluster)
-# registerDoSEQ()
-# ---------------
+rf_random <- train(Obese_Class~., data=data, method="rf", metric="Accuracy", tuneLength=15, trControl=control)
+print(rf_random)
+plot(rf_random)
+ 
+#stop the cluster and force R back to 1 core
+stopCluster(cluster)
+registerDoSEQ()
 
-#attach(data)
+attach(data)
 ```
 
 ```{r deep tree}
