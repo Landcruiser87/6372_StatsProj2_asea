@@ -245,6 +245,7 @@ points(x=6, y=0.9, type="p", pch=10, col="green")
 The cumulative plot shows 6 PCs are needed to retain ~90% of the total variation in the data.
 
 ```{r Plot some Principal Components}
+par(mfrow=c(3,3))
 #Use ggplot2 to plot pc's
 ggplot(data = pc.scores, aes(x = PC1, y = PC2)) +
     geom_point(aes(col=Obese_Class), size=1)+
@@ -480,21 +481,21 @@ First, we obtain our metrics for our base model. We performed a 10-fold cross va
 ```{r Log Regression Model for Main Model}
 
 # Set desired data set
-train=train4
-test=test4
+logreg.train=train4
+logreg.test=test4
 
 # 10 fold cv
 control <- trainControl(method = "cv", number = 10, savePredictions = TRUE)
 
 # Model
-logreg.fit <- train(Obese_Class ~ ., data=train, method="glm", family=binomial(),trControl=control)
+logreg.fit <- train(Obese_Class ~ ., data=logreg.train, method="glm", family=binomial(),trControl=control)
 logreg.fit
 
 # predict on test
-logreg.pred <- predict(logreg.fit,test)
+logreg.pred <- predict(logreg.fit,logreg.test)
 
 # results
-confusionMatrix(logreg.pred,test$Obese_Class)
+confusionMatrix(logreg.pred,logreg.test$Obese_Class)
 
 ```
 
@@ -517,14 +518,14 @@ test = data5[-train_indices,] # random test data
 control <- trainControl(method = "cv", number = 10, savePredictions = TRUE)
 
 # Model
-logreg.fit <- train(Obese_Class ~ ., data=train, method="glm", family=binomial(),trControl=control)
-logreg.fit
+logreg.cmplxfit <- train(Obese_Class ~ ., data=train, method="glm", family=binomial(),trControl=control)
+logreg.cmplxfit
 
 # predict on test
-logreg.pred <- predict(logreg.fit,test)
+logreg.cmplxpred <- predict(logreg.cmplxfit,test)
 
 # results
-confusionMatrix(logreg.pred,test$Obese_Class)
+confusionMatrix(logreg.cmplxpred,test$Obese_Class)
 ```
 
 
@@ -573,17 +574,15 @@ train = data[train_indices,] # random training data
 test = data[-train_indices,] # random test data 
 
 lda <- lda(Obese_Class~.,data = train)
-qda <- qda(Obese_Class~.,data = train)
+lda
+
+#plot distribution for obese
+plot(lda)
 
 #lda confusion matrix
 lda_prd<-predict(lda, newdata = test)$class
 lda_cm<-table(lda_prd,test$Obese_Class)
 lda_cm
-
-#qda confusion matrix
-qda_prd<-predict(qda, newdata = test)$class
-qda_cm<-table(qda_prd,test$Obese_Class)
-qda_cm
 
 #This is specific to our problem statement, will vary for other situations
 lda_TP = lda_cm[2,2]
@@ -607,7 +606,17 @@ paste("Sensitivity:", format(lda_SNS,digits=3))
 lda_SPC<-lda_TN/(lda_TN+lda_FP)
 paste("Specificity:", format(lda_SPC,digits=3))
 
+#--QDA--
+qda <- qda(Obese_Class~.,data = train)
+qda
 
+#library(klaR)
+#partimat(Obese_Class~., data=train, method="qda")
+
+#qda confusion matrix
+qda_prd<-predict(qda, newdata = test)$class
+qda_cm<-table(qda_prd,test$Obese_Class)
+qda_cm
 
 #This is specific to our problem statement, will vary for other situations
 qda_TP = qda_cm[2,2]
@@ -661,7 +670,6 @@ plot(roc.perf,main="QDA")
 abline(a=0, b= 1) #Ref line indicating poor performance
 text(x = .25, y = .75,paste("AUC = ", round(auc.train[[1]],3), sep = ""))
 
-
 ```
 
 ```{r Rando_Forrest}
@@ -685,7 +693,6 @@ Obese.full.forrest <- randomForest(Obese_Class~., data=datarf, importance = TRUE
 importance(Obese.full.forrest) #Variable importance for placement order (Forward, Backward, Stepwise)
 varImpPlot(Obese.full.forrest,type=1, main='Random Tree Variable Importance')
 
-
 ```
 
 
@@ -695,11 +702,11 @@ data <- read.csv("./Data/CHR_Data.csv")
 
 # remove the id numbers, need to remove the state and county because that doesn't work with trees
 # remove Premature_Death_Rate since we are interesting in "living type" predictors
-data <- data[,-c(1:4)]
+data <- data[,-c(1:3,4)]
 
 # create obese binary classification where BMI >= 30 is considered Obese, 0 = not obese, 1 = obese
 data$Obese_Class <- "Obese"
-data[data$Obese < 30, "Obese_Class"] <- "Not_obese"
+data[data$Obese < 30, "Obese_Class"] <- "Not Obese"
 data$Obese_Class <- as.factor(as.character(data$Obese_Class))
 
 # impute variables with their medians, prefer medians in the event there is any skew
@@ -715,29 +722,15 @@ rand.x <- data[,c(1:19)]
 rand.y <- data[,20]
 
 # Create model with default paramters
-control <- trainControl(method="repeatedcv", number=10, repeats=3, savePredictions = "final", classProbs = T)
-#added Savepredictions, and classprobs to above
-
-samplesize=nrow(data)
-train_percent = .8
-train_indices = sample(seq(1,samplesize,length = samplesize),train_percent*samplesize) # get random indices
-train = data[train_indices,] # random training data 
-test = data[-train_indices,] # random test data 
-
-
+control <- trainControl(method="repeatedcv", number=10, repeats=3)
 set.seed(7)
-mtry <- 8 #sqrt(ncol(rand.x)) #fixed the mtry at 8
+mtry <- sqrt(ncol(rand.x))
 tunegrid <- expand.grid(.mtry=mtry)
-rf_default <- train(Obese_Class~., data=train, method="rf", metric="Accuracy", tuneGrid=tunegrid, trControl=control)
-
+rf_default <- train(Obese_Class~., data=data, method="rf", metric="Accuracy", tuneGrid=tunegrid, trControl=control)
 print(rf_default)
 
-rf_default$results$Accuracy #Accuracy
-rf_default.pred <-predict(rf_default, newdata = test)
-confusionMatrix(rf_default.pred, as.factor(test$Obese_Class))
-
-#parallel comput, requires parallel adn doParallel libraries
-#create parallel cluster, leave one out so you don't lock your computer
+# parallel comput, requires parallel adn doParallel libraries
+# create parallel cluster, leave one out so you don't lock your computer
 cluster <- makeCluster(detectCores() - 1)
 registerDoParallel(cluster)
 
@@ -753,33 +746,18 @@ plot(rf_random)
 # stop the cluster and force R back to 1 core
 stopCluster(cluster)
 registerDoSEQ()
----------------
+#---------------
 
 #attach(data)
 ```
 
 ```{r deep tree}
-mytree <- tree(Smokers~., datarf)
+mytree <- tree(Smokers~., data)
 plot(mytree)
 text(mytree,pretty=0)
 ```
 
 This tree shows that Frequent Physical Distress is a main split point for premature deaths.
-
-```{r pretty tree setup}
-library(rpart)
-library(rattle)
-library(rpart.plot)
-library(RColorBrewer)
-library(party)
-library(partykit)
-```
-
-```{r pretty tree}
-form <- as.formula(Obese_Class ~.)
-tree.1 <- rpart(form,datarf)
-fancyRpartPlot(tree.1, cex=0.65)
-```
 
 ```{r}
 #cross validation tree
@@ -792,12 +770,12 @@ par(mfrow=c(1,1))
 plot(cv.obese$size,cv.obese$dev,type="b")
 ```
 
-```{r ols comparison}
+```{r}
 #compare normal regression, knn, and ols methods using MSE
 set.seed(123)
 index<-sample(1:3136,2500) #approx 80/20 train/test split
-train<-datarf[index,]
-test<-datarf[-index,]
+train<-data[index,]
+test<-data[-index,]
 
 train.tree<-tree(Smokers~.,train)
 summary(train.tree)
@@ -807,13 +785,21 @@ plot(cv.tree(train.tree,FUN=prune.tree,method="deviance"))
 
 testMSE<-mean((test$Smokers - predict(train.tree,newdata=test) )^2)
 
+# KNN NOT WORKING, PROD DUE TO ARRAY INDEXES
+#knn<-FNN::knn.reg(train = train[,-c(3,4)], test =test[,-c(3,4)], y = train$Smokers, k = 5)
+#testMSE.knn<-mean( ( test$Smokers-knn$pred)^2)
+
 full.fit<-lm(Smokers~.,train)
 testMSE.ols<-mean((test$Smokers-predict(full.fit,test))^2)
 
 
 testMSE
+#testMSE.knn
 testMSE.ols
 ```
+
+The OLS method has the lowest MSE of 1.823254.
+
 
 We will use KNN as another model
 
