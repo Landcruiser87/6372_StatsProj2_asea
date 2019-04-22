@@ -1,0 +1,762 @@
+---
+title: "Health Analysis"
+author: "Evan Adams, Steve Bramhall, Andy Heroy, Adam Scheerer"
+date: "April 17, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(car)
+library(Hmisc)
+library(gplots)
+library(ggplot2)
+library(ROCR)
+library(MASS)
+library(corrplot)
+library(epitools)
+library(dplyr)
+library(glmnet)
+library(ResourceSelection)
+library(caret)
+# tree libs
+library(rgl)
+library(tree)
+library(ISLR)
+library(randomForest)
+# parallel processing
+library(parallel)
+library(doParallel)
+```
+
+----Data Set Notes----
+
+data  = imputed, no outliers
+data2 = same as data but moved Obese_Class to the beginning
+data3 = removed highly correlated variable
+data4 = removed insignificant variables per logistic regression
+
+----------------------
+
+The national dataset used in this study comes from the 2017 County Health Rankings website. Since each state and county have varying populations, we chose to use the data as a percent of the population. The death rate is the age-adjusted Years of Potential Life Lost rate per 100,000. All variables are continuous so we do not need to be concerned about unbalanced categorical variables.
+
+OBJECTIVE1
+
+We want to model the probability of being obsese (BMI > 30) for a particular variable. The team has decided to use the following variables as the predictors.The variable data represent the percentage of the population for a specifc US county.
+
+Health Variables
+- Smokers
+- Physically Incactive
+- Excesive Drinking
+- Frequent Mental Distress
+- Frequent Physical Distress
+- Diabetic
+- Insufficient Sleep
+
+Demographic Type Variables
+- Uninsured
+- Some College 
+- Unemployed
+- Severe Housing Problems
+
+
+EXPLORATORY DATA ANALYSIS
+
+```{r EDA Start}
+# import health data
+alldata = read.csv("./Data/CHR_Data.csv")
+
+# get initial data
+data <- alldata[,-c(1:3,4,14,18:24)]
+
+# show data summary to identify variables with missing data
+summary(data)
+```
+
+The summary statistics show missing values for Premature_Death_Rate, Unemployed, Uninsured, and Graduation_Rate. We impute the missing data with the median values since some distributions show a little skew when comparing the mean and medians. We will later show the histograms confirm some skew.
+
+```{r EDA Impute}
+# impute variables with their medians, prefer medians in the event there is any skew
+data$Unemployed <- with(data,impute(Unemployed,median))
+data$Uninsured <- with(data,impute(Uninsured,median))
+```
+
+EDA-SKEW 
+
+The histograms confirm some skew with Frequent_Mental_Distress, Frequent_Physical_Distress,Uninsured, Unemployed, and Severe_Housing_Problems. There is no concern or need to do anything about the skew since we have a relatively large data set and we are performing a logistic regression. 
+
+```{r EDA Histograms}
+# get chosen predictors for EDA
+predictors <- data[,-2]
+
+# histogram of chosen predictors
+par(mfrow=c(3,4))
+for(i in 1:11) {
+    hist(predictors[,i], main=names(predictors)[i])
+}
+```
+
+OUTLIERS (Used SAS, will put screen shots and comments about Cook's D in final paper)
+
+We remove the data for Yuma county in Arizona due to the outlier it creates for unemployment. The county is along the Mexico border and is predominately a farming community with migrant (seasonal) workers. This situation is uncommon and not typical of U.S. counties. We also removed the data for Imperial county in California for the same reasons. It is adjacent to Yuma county.
+
+We remove the data for Bethel, Northwest Arctic and Yukon-Koyukuk counties in Alaska for Severe Housing Problems. There are four factors that contribute to this category. They are housing units that lack complete kitchens, lack complete plumbing facilities, overcrowded, or severely cost burdened. These counties reside in Alaska where the cost to build is beyond what the residents can afford and therefore overcrowding is above normal compared to the rest of the United States. [Nathan Wiltse, Dustin Madden, 2018 Alaska Housing Assessment, Jan 17, 2018, https://www.ahfc.us/download_file/view/5124/853]
+
+```{r Remove Outliers}
+# print data before outlier removal
+plot(data$Unemployed)
+plot(data$Severe_Housing_Problems)
+data <- data[!rowSums(data[c(-1:-10,-12)] > 20),] # removed unemployment outliers for migrant farming counties
+data <- data[!rowSums(data[c(-1:-11)] > 50),]     # removed housing prob outliers for poor Alaska counties
+
+# print data after outlier removal
+plot(data$Unemployed)
+plot(data$Severe_Housing_Problems)
+```
+
+```{r EDA Scatter Plots}
+# create obese binary classification where BMI >= 30 is considered Obese, 0 = not obese, 1 = obese
+data$Obese_Class <- "Obese"
+data[data$Obese < 30, "Obese_Class"] <- "Not Obese"
+data$Obese_Class <- as.factor(as.character(data$Obese_Class))
+
+# -- create new data set with obese_class first --
+data2 <- data[,c(13,1,3:12)]
+
+# summary stats by group Obese_Class, to add to SAS Box Plots
+t(aggregate(Smokers~Obese_Class,data=data2,summary))
+t(aggregate(Physically_Inactive~Obese_Class,data=data2,summary))
+t(aggregate(Excessive_Drinking~Obese_Class,data=data2,summary))
+t(aggregate(Frequent_Mental_Distress~Obese_Class,data=data2,summary))
+t(aggregate(Frequent_Physical_Distress~Obese_Class,data=data2,summary))
+t(aggregate(Diabetic~Obese_Class,data=data2,summary))
+t(aggregate(Insufficient_Sleep~Obese_Class,data=data2,summary))
+t(aggregate(Uninsured~Obese_Class,data=data2,summary))
+t(aggregate(Some_College~Obese_Class,data=data2,summary))
+t(aggregate(Unemployed~Obese_Class,data=data2,summary))
+t(aggregate(Severe_Housing_Problems~Obese_Class,data=data2,summary))
+
+# scatter matrices, with Obese as the colors
+pairs(data2[,2:12],col=data$Obese_Class)
+```
+
+For the most part, the colored scatter plot matrix tells us our variables should do a decent job with logistic regression based on the color separation seen in the matrix. Strong correlation  is seen between the following:
+<ul>
+<li>Frequenet_Mental_Distress, Physical_Mental_Distress</li>
+</ul>
+There's fairly good correlation between the following:
+<ul>
+<li>Smokers, Frequent_Mental_Distress, Physical_Mental_Distress</li>
+<li>Diabetic, Physically_Inactive, Insufficient Sleep, Frequent_Mental_Distress, Frequent_Physical_Distress.</li>
+</ul>
+
+We'll review a correlation heatmap to get better insights next.
+
+```{r EDA Heatmap}
+# predictor heatmap correlations to examine whether variables are redundant
+cor1 <- cor(data2[,2:12])
+heatmap.2(cor1,col=redgreen(75), cexRow=.7,cexCol=0.7,
+          density.info="none", trace="none", dendrogram=c("both"), 
+          symm=F,symkey=T,symbreaks=T, scale="none",key=T)
+```
+
+The dendogramed heatmap confirms the strong correlation previously seen with Frequenet_Mental_Distress and Physical_Mental_Distress.
+
+
+Additional correlation is seen between the following:
+<ul>
+<li>Unemployed, Insufficient Sleep</li>
+<li>Some_College, Excessive_Drinking</li>
+<li>Diabetic, Physically_Inactive</li>
+<li>Smokers, Frequenet_Mental_Distress, Physical_Mental_Distress</li>
+<li>Uninured, Severe_Housing_Problems</li>
+</ul>
+
+The correlations identified by the dendogram surprisingly all make practical sense. One would expect to lose sleep if they were unemployed. Drinking being correlated to college makes sense. Diabetic is not uncommon amongst physically incative people. If someone is living in an area with severe housing problems, we might expect they would not be able to afford insurance.
+
+Let's review correlation with ratings seen in a variable correlation heatmap.
+
+```{r EDA CorrPlot}
+#Correlation Plot 
+cor2 <- cor(data2[,2:12])
+df_corr <-corrplot(cor2, type="upper", addCoef.col = "white", number.digits = 2, number.cex = 0.5, method="square", order="hclust", title="Variable Corr Heatmap",tl.srt=45, tl.cex = 0.8)
+```
+
+Based on the variable correlation heatmap, the order of correalated variables are:
+<ol>
+<li>Frequenet_Mental_Distress, Physical_Mental_Distress</li>
+<li>Smokers, Frequenet_Physical_Distress</li>
+<li>Smokers, Frequenet_Mental_Distress</li>
+<li>Diabetic, Physically_Inactive</li>
+<li>Frequent_Mental_Distress, Insufficient Sleep</li>
+<li>Unemployed, Frequent_Mental_Distress</li>
+<li>Unemployed, Frequent_Physical_Distress</li>
+<li>Excessive_Drinking, Frequent_Physical_Distress</li>
+<li>Excessive_Drinking, Frequent_Mental_Distress</li>
+<li>Diabetic, Frequent_Mental_Distress</li>
+</ol>
+
+Let's look at the VIFs to confirm the collinear variables.
+
+```{r VIF Check}
+# Logistics Regression
+glm.vifchk <- glm(Obese_Class ~ ., data = data2, family = binomial(link="logit"))
+vif(glm.vifchk)
+```
+
+The VIFS and multiple visual tools agree there is a strong relationship between Frequent_Mental_Distress and Frequent_Physical_Distress. We choose to remove Frequent_Physical_Distress. 
+
+```{r Remove Highly Correlated Variable}
+# Remove Frequent_Physical_Distress from data2
+data3 <- data2[,-6] 
+```
+
+Lets use PCA to visualize any other insights. It is fortunate to already have our data somewhat normalized on a percentage scale. It reduces the scale sensitivity seen with PCA. 
+
+```{r PCA}
+dat.x <- data3[,2:11]
+dat.y <- data3[,1]
+pc.result<-prcomp(dat.x,scale.=TRUE)
+pc.scores<-pc.result$x
+pc.scores<-data.frame(pc.scores)
+pc.scores$Obese_Class<-dat.y
+
+#Loadings for interpretation
+pc.result$rotation
+```
+
+```{r Scree Plot}
+# Scree plot
+pc.eigen<-(pc.result$sdev)^2
+pc.prop<-pc.eigen/sum(pc.eigen)
+pc.cumprop<-cumsum(pc.prop)
+plot(1:10,pc.prop,type="l",main="Scree Plot",ylim=c(0,1),xlab="PC #",ylab="Proportion of Variation")
+axis(1, seq(1,10,1))
+lines(1:10,pc.cumprop,lty=3)
+
+# Cumulative proportion plot
+cumulative.prop<-cumsum(pc.eigen/sum(pc.eigen))
+plot(1:10,cumulative.prop,type="l",main="Cumulative proportion",ylim=c(0.5,1))
+points(x=6, y=0.9, type="p", pch=10, col="green")
+```
+
+The cumulative plot shows 6 PCs are needed to retain ~90% of the total variation in the data.
+
+```{r Plot some Principal Components}
+#Use ggplot2 to plot pc's
+ggplot(data = pc.scores, aes(x = PC1, y = PC2)) +
+    geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC3)) +
+  geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+  geom_vline(xintercept = 0, colour = "gray65") +
+  ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC4)) +
+    geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC5)) +
+    geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC1, y = PC6)) +
+    geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC2, y = PC3)) +
+    geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC2, y = PC4)) +
+  geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+  geom_vline(xintercept = 0, colour = "gray65") +
+  ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC2, y = PC5)) +
+    geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+
+ggplot(data = pc.scores, aes(x = PC2, y = PC6)) +
+    geom_point(aes(col=Obese_Class), size=1)+
+  geom_hline(yintercept = 0, colour = "gray65") +
+    geom_vline(xintercept = 0, colour = "gray65") +
+    ggtitle("PCA plot of Health Data")
+```
+
+The PCA plots show decent separation but not great separation. We should still be able to get decent results using PC vars but we will use the original variables for our model.
+
+For our model, we choose a logistic regression using LASSO for feature reduction.
+
+```{r Create Train and Test for Data3}
+# build a training & test data set, match train/test idx to data idx for debug tracking
+samplesize=nrow(data3)
+train_percent = .8
+train_indices = sample(seq(1,samplesize,length = samplesize),train_percent*samplesize) # get random indices
+train3 = data3[train_indices,] # random training data
+test3 = data3[-train_indices,] # random test data
+train3.x <-train3[,2:ncol(train3)]
+train3.y <-train3[,1]
+```
+
+```{r First Pass Prob1 Log Regress}
+# Perform on all data
+glm.fit1 <- glm(Obese_Class ~ ., data = data3, family = binomial)
+summary(glm.fit1)
+```
+
+After different assessments and iterations, we agree with removing the following suggested insignificant predictors:
+- Excessive_Drinking
+- Insufficient_Sleep
+- Some_College
+- Unemployed
+- Sever_Housing_Problems
+
+```{r Remove Insig Vars}
+# removed insignifcant predictors
+data4 <- data3[,-c(4,7,9:11)]
+```
+
+```{r Create Train and Test for Data4}
+# build a training & test data set, match train/test idx to data idx for debug tracking
+# using same split and indices used in train3/test3
+samplesize=nrow(data3)
+train4 = data4[train_indices,] # random training data
+test4 = data4[-train_indices,] # random test data
+train4.x <-train4[,2:ncol(train4)]
+train4.y <-train4[,1]
+
+# checking group proportions for training bias, should see similar proportions of 0s & 1s in each
+proportion <- rbind(table(train4$Obese_Class),table(test4$Obese_Class))
+dimnames(proportion)<- list("Data Set"=c("Train","Test"), "Obese_Class"=c("Not obese","Obese"))
+proportion
+```
+
+Rerun the model with only signifcant predictors.
+
+```{r Final Prob1 Log Regress}
+# match fit idx to data idx for debug tracking
+logreg.fit4 <- glm(Obese_Class ~ ., data = data4, family = binomial)
+summary(logreg.fit4)
+confint(logreg.fit4)
+```
+
+MODEL ASSUMPTIONS CHECK1
+
+We choose the receiving operating characteristic (ROC) as our first measure of classier performance.  
+
+```{r Goodness of Fit Chk1}
+#--glm ROC--
+logreg.pred4<-predict(logreg.fit4, newdata = train4.x, type = "response")
+pred <- prediction(logreg.pred4, train4.y)
+roc.perf = performance(pred, measure = "tpr", x.measure = "fpr")
+auc.train <- performance(pred, measure = "auc")
+auc.train <- auc.train@y.values
+
+#Plot glm ROC
+plot(roc.perf,main="GLM")
+abline(a=0, b= 1) #Ref line indicating poor performance
+text(x = .25, y = .75,paste("AUC = ", round(auc.train[[1]],3), sep = ""))
+```
+
+Our area under the curve (AUC) ~ 0.89. Since this is above 0.8 (good rule of thumb) our model does a good job discriminating between obese and not obese.
+
+MODEL ASSUMPTIONS CHECK2
+
+A logistic regression model provides a better fit to the data if it demonstrates an improvement over a model with fewer predictors. We us the likelihood ratio test. We create a model with two key predictors and compare against our final model ("full model") with five predictors. 
+
+```{r Goodness of Fit Chk2} 
+logreg.fitless4 <- glm(Obese_Class ~ Smokers+Physically_Inactive, data=data4, family=binomial) # reduced model
+anova(logreg.fit4,logreg.fitless4, test="Chisq")
+``` 
+
+Ho: The reduced model is favored over a more full model. 
+Ha: The reduced model is not favored over a more full model. 
+
+We reject Ho. 
+With an alpha of 0.05, the results show the observed difference in model fit is statistically significant with a p-value < 2.2e-16. The evidence suggests the glm.fit "full model" is favored.
+
+
+```{r Goodness of Fit Ch3}
+hoslem.test(logreg.fit4$y, fitted(logreg.fit4), g=10)
+```
+
+Ho: The model fits the data.
+Ha: The model does not fit the data.
+Applying the Hosmer-Lemeshow Test, we fail the reject the null hypothesis with a p-value > 0.3217.
+
+```{r Goodness of Fit4}
+# McFadden's Pseudo R-squared
+ll.null <- logreg.fit4$null.deviance/-2  
+ll.proposed <- logreg.fit4$deviance/-2
+(ll.null - ll.proposed) / ll.null  # the R-squared is basically the overall effect size
+1-pchisq(2*(ll.proposed - ll.null),df=(length(logreg.fit4$coefficients)-1))
+```
+
+The R-squared shown is basically the overall effect size. The p-value is very small so the R-squared isn't due to chance. 
+
+
+Our final fitted model for Problem 1 will be in the paper.
+
+
+========================================================================================
+
+OBJECTIVE 2:
+
+With a simple logistic regression model as a baseline, perform additional competing models to improve on prediction performance metrics.
+
+First, we obtain our metrics for our base model. We performed a 10-fold cross validation. 
+
+```{r Log Regression Model for Main Model}
+# Set desired data set
+train=train4
+test=test4
+
+# 10 fold cv
+control <- trainControl(method = "cv", number = 10, savePredictions = TRUE)
+
+# Model
+logreg.fit <- train(Obese_Class ~ ., data=train, method="glm", family=binomial(),trControl=control)
+logreg.fit
+
+# predict on test
+logreg.pred <- predict(logreg.fit,test)
+
+# results
+confusionMatrix(logreg.pred,test$Obese_Class)
+```
+
+Let's add an interactive term to see if we can improve the model. We will add the "partiers", Smokers*Excessive_Drinking with mean Execessive_Drinking will also be added back to the model. So our complex model is shown below.
+
+log(p/(1-p)) = logit(p) = B0 + B1(Smokers) + B2(Physically_Inactive) + B3(Frequent_Mental_Distress) + B4(Diabetic) + B5(Uninsured) + B6(Excessive_Drinking) + B7(Smokers*Excessive_Drinking)
+
+```{r Log Regression Model for Prediction-Complex }
+# Add Excessive Drinking to a New Data Set
+data5 <- data3[,-c(7,9:11)]
+
+# build a training & test data set with complex model data
+samplesize=nrow(data5)
+train_percent = .8
+train_indices = sample(seq(1,samplesize,length = samplesize),train_percent*samplesize) # get random indices
+train = data5[train_indices,] # random training data
+test = data5[-train_indices,] # random test data
+
+# 10 fold cv
+control <- trainControl(method = "cv", number = 10, savePredictions = TRUE)
+
+# Model
+logreg.fit <- train(Obese_Class ~ ., data=train, method="glm", family=binomial(),trControl=control)
+logreg.fit
+
+# predict on test
+logreg.pred <- predict(logreg.fit,test)
+
+# results
+confusionMatrix(logreg.pred,test$Obese_Class)
+```
+
+
+```{r LDA and QDA}
+# reset dataset
+data <- read.csv("./Data/CHR_Data.csv")
+
+# remove the id numbers, need to remove the state and county because that doesn't work with trees
+# remove Premature_Death_Rate since we are interesting in "living type" predictors
+data <- data[,-c(1:3,4)]
+
+# create obese binary classification where BMI >= 30 is considered Obese, 0 = not obese, 1 = obese
+data$Obese_Class <- "Obese"
+data[data$Obese < 30, "Obese_Class"] <- "Not Obese"
+data$Obese_Class <- as.factor(as.character(data$Obese_Class))
+
+# remove numeric obese, and ethnic variables
+data <- data[,-c(2,10,15:20)]
+
+# print data before outlier removal
+plot(data$Unemployed)
+plot(data$Severe_Housing_Problems)
+
+# remove outliers
+data <- data[!rowSums(data[-c(1:9,10:13)] > 20),]  # removed unemployment outliers for migrant farming counties
+data <- data[!rowSums(data[-c(1:10,12:13)] > 50),] # removed housing prob outliers for poor Alaska counties
+
+# print data after outlier removal
+plot(data$Unemployed)
+plot(data$Severe_Housing_Problems)
+
+# impute variables with their medians, prefer medians in the event there is any skew
+data$Unemployed <- with(data,impute(Unemployed,median))
+data$Uninsured <- with(data,impute(Uninsured,median))
+
+#variance
+round(cov(data[1:12]), 2) 
+sum(diag(cov(data[1:12]))) # total variance
+#--EDA end--
+
+# split data into train and test
+samplesize=nrow(data)
+train_percent = .8
+train_indices = sample(seq(1,samplesize,length = samplesize),train_percent*samplesize) # get random indices
+train = data[train_indices,] # random training data 
+test = data[-train_indices,] # random test data 
+
+#--LDA--
+lda <- lda(Obese_Class~.,data = train)
+
+#lda confusion matrix
+lda_prd<-predict(lda, newdata = test)$class
+lda_cm<-table(lda_prd,test$Obese_Class)
+lda_cm
+
+confusionMatrix(lda_prd, as.factor(test$Obese_Class))
+
+#--QDA--
+qda <- qda(Obese_Class~.,data = train)
+
+#qda confusion matrix
+qda_prd<-predict(qda, newdata = test)$class
+qda_cm<-table(qda_prd,test$Obese_Class)
+qda_cm
+
+confusionMatrix(qda_prd, as.factor(test$Obese_Class))
+
+#--lda ROC--
+ldaprd<-predict(lda, newdata = train)$posterior
+#correcting for the way lda creates predicted probabilities
+ldaprd<-ldaprd[,2]
+pred <- prediction(ldaprd, train$Obese_Class)
+roc.perf = performance(pred, measure = "tpr", x.measure = "fpr")
+auc.train <- performance(pred, measure = "auc")
+auc.train <- auc.train@y.values
+#Plot lda ROC
+plot(roc.perf,main="LDA")
+abline(a=0, b= 1) #Ref line indicating poor performance
+text(x = .25, y = .75,paste("AUC = ", round(auc.train[[1]],3), sep = ""))
+
+#--qda ROC--
+qdaprd<-predict(qda, newdata = train)$posterior
+#correcting for the way lda creates predicted probabilities
+qdaprd<-qdaprd[,2]
+pred <- prediction(qdaprd, train$Obese_Class)
+roc.perf = performance(pred, measure = "tpr", x.measure = "fpr")
+auc.train <- performance(pred, measure = "auc")
+auc.train <- auc.train@y.values
+#Plot lda ROC
+plot(roc.perf,main="QDA")
+abline(a=0, b= 1) #Ref line indicating poor performance
+text(x = .25, y = .75,paste("AUC = ", round(auc.train[[1]],3), sep = ""))
+```
+
+```{r Rando_Forrest}
+#have to reimport and reimpute some data.  Annoying, apologies.
+datarf <- alldata[-c(1:4)]
+datarf$Unemployed <- with(datarf,impute(Unemployed,median))
+datarf$Uninsured <- with(datarf,impute(Uninsured,median))
+datarf$Graduation_Rate <- with(datarf,impute(Graduation_Rate,median))
+
+# create obese binary classification where BMI >= 30 is considered Obese, 0 = not obese, 1 = obese
+datarf$Obese_Class <- "Obese"
+datarf[datarf$Obese < 30, "Obese_Class"] <- "Not_Obese"
+datarf$Obese_Class <- as.factor(as.character(datarf$Obese_Class))
+datarf <- datarf[,-2] # remove numeric Obese
+# na_count <-sapply(datarf, function(y) sum(length(which(is.na(y)))))
+# na_count <- data.frame(na_count)
+
+datarf <- datarf[,c(20,1:19)]
+Obese.full.forrest <- randomForest(Obese_Class~., data=datarf, importance = TRUE)
+
+#importance(Obese.full.forrest) #Variable importance for placement order (Forward, Backward, Stepwise)
+varImpPlot(Obese.full.forrest,type=1, main='Random Tree Variable Importance')
+```
+
+
+```{r trees}
+# reset dataset
+data <- read.csv("./Data/CHR_Data.csv")
+
+# remove the id numbers, need to remove the state and county because that doesn't work with trees
+# remove Premature_Death_Rate since we are interesting in "living type" predictors
+data <- data[,-c(1:4)]
+
+# create obese binary classification where BMI >= 30 is considered Obese, 0 = not obese, 1 = obese
+data$Obese_Class <- "Obese"
+data[data$Obese < 30, "Obese_Class"] <- "Not_obese"
+data$Obese_Class <- as.factor(as.character(data$Obese_Class))
+
+# impute variables with their medians, prefer medians in the event there is any skew
+data$Unemployed <- with(data,impute(Unemployed,median))
+data$Uninsured <- with(data,impute(Uninsured,median))
+data$Graduation_Rate <- with(data,impute(Graduation_Rate))
+
+# remove numeric obese
+data <- data[,-2]
+#----EDA End----
+
+rand.x <- data[,c(1:19)]
+rand.y <- data[,20]
+
+#-- Set parallel processing Begin--
+
+#parallel compute, requires parallel and doParallel libraries
+#create parallel cluster, leave one out so you don't lock your computer
+cluster <- makeCluster(detectCores() - 1)
+registerDoParallel(cluster)
+
+# added Savepredictions, and classprobs to above
+samplesize=nrow(data)
+train_percent = .8
+train_indices = sample(seq(1,samplesize,length = samplesize),train_percent*samplesize) # get random indices
+train = data[train_indices,] # random training data 
+test = data[-train_indices,] # random test data 
+
+#-- Random Forest Search Parms --
+#Random Search
+control <- trainControl(method="repeatedcv", number=10, repeats=3, search="random", allowParallel = TRUE)
+set.seed(7)
+mtry <- sqrt(ncol(rand.x))
+
+rf_random <- train(Obese_Class~., data=data, method="rf", metric="Accuracy", tuneLength=15, trControl=control)
+print(rf_random)
+plot(rf_random)
+
+#--Random Forest with mtry = 8 --
+#set.seed(7)
+mtry <- 8 # fixed the mtry at 8
+tunegrid <- expand.grid(.mtry=mtry)
+rf_default <- train(Obese_Class~., data=train, method="rf", metric="Accuracy", tuneGrid=tunegrid, trControl=control)
+print(rf_default)
+
+rf_default$results$Accuracy #Accuracy
+rf_default.pred <-predict(rf_default, newdata = test)
+
+confusionMatrix(rf_default.pred, as.factor(test$Obese_Class))
+
+#-- End parallel processing--
+#stop the cluster and force R back to 1 core
+stopCluster(cluster)
+registerDoSEQ()
+```
+
+```{r deep tree}
+# print a random forest tree
+mytree <- tree(Smokers~., datarf)
+plot(mytree)
+text(mytree,pretty=0)
+```
+
+This tree shows that Frequent Physical Distress is a main split point for premature deaths.
+
+```{r pretty tree setup}
+library(rpart)
+library(rattle)
+library(rpart.plot)
+library(RColorBrewer)
+library(party)
+library(partykit)
+```
+
+```{r pretty tree}
+# print a better looking tree
+form <- as.formula(Obese_Class ~.)
+tree.1 <- rpart(form,datarf)
+fancyRpartPlot(tree.1, cex=0.65)
+```
+
+```{r}
+# another cross validation tree check
+set.seed(3)
+cv.obese=cv.tree(mytree,FUN=prune.tree,method="deviance")
+names(cv.obese)
+cv.obese
+plot(cv.obese)
+par(mfrow=c(1,1))
+plot(cv.obese$size,cv.obese$dev,type="b")
+```
+The version also finds mtry = 8 as optimal
+
+We will use KNN as another model
+
+```{r knn}
+library(class)
+#---reset dataset---
+data <- read.csv("./Data/CHR_Data.csv")
+
+#remove the id numbers, need to remove the state and county because that doesn't work with trees
+data <- data[,-c(1:3)]
+
+#impute for missing values previously identified in EDA
+data$Unemployed <- with(data,impute(Unemployed,median))
+data$Uninsured <- with(data,impute(Uninsured,median))
+data$Graduation_Rate <- with(data,impute(Graduation_Rate))
+
+# create obese binary classification where BMI >= 30 is considered Obese, 0 = not obese, 1 = obese
+data$Obese_Class <- "Obese"
+data[data$Obese < 30, "Obese_Class"] <- "Not Obese"
+data$Obese_Class <- as.factor(as.character(data$Obese_Class))
+
+# remove Premature_Death_Rate since we are interesting in "living type" predictors, remove numeric obese data
+data <- data[,-c(1,3)] 
+
+# set impute cols to numeric
+data$Unemployed <- as.numeric(data$Unemployed)
+data$Uninsured <- as.numeric(data$Uninsured)
+data$Graduation_Rate <- as.numeric(data$Graduation_Rate)
+
+# normalize data with lapply
+data_norm <- data
+num.vars <- sapply(data_norm,is.numeric)
+data_norm[num.vars] <- lapply(data_norm[num.vars], scale)
+#summary(data_norm[1:19])
+#------------------
+# build a training & test data set
+samplesize=nrow(data_norm)
+train_percent = .7
+train_indices = sample(seq(1,samplesize,length = samplesize),train_percent*samplesize) # get random indices
+knn_train = data_norm[train_indices,] # random training data
+knn_test = data_norm[-train_indices,] # random test data
+
+# checking group proportions for training bias, should see similar proportions of 0s & 1s in each
+proportion <- rbind(table(knn_train$Obese_Class),table(knn_test$Obese_Class))
+dimnames(proportion)<- list("Data Set"=c("Train","Test"), "Obese_Class"=c("Not obese","Obese"))
+proportion
+
+knn.5 = class::knn(knn_train[,c(1:19)],knn_test[,c(1:19)],knn_train$Obese_Class,k=5)
+knn_test$ObesePred = knn.5
+confusionMatrix(table(knn_test$Obese_Class,knn_test$ObesePred))
+
+knn.10 = class::knn(knn_train[,c(1:19)],knn_test[,c(1:19)],knn_train$Obese_Class,k=10)
+knn_test$ObesePred = knn.10
+confusionMatrix(table(knn_test$Obese_Class,knn_test$ObesePred))
+
+knn.20 = class::knn(knn_train[,c(1:19)],knn_test[,c(1:19)],knn_train$Obese_Class,k=20)
+knn_test$ObesePred = knn.20
+confusionMatrix(table(knn_test$Obese_Class,knn_test$ObesePred))
+
+knn.50 = class::knn(knn_train[,c(1:19)],knn_test[,c(1:19)],knn_train$Obese_Class,k=50)
+knn_test$ObesePred = knn.50
+confusionMatrix(table(knn_test$Obese_Class,knn_test$ObesePred))
+
+knn.100 = class::knn(knn_train[,c(1:19)],knn_test[,c(1:19)],knn_train$Obese_Class,k=100)
+knn_test$ObesePred = knn.100
+confusionMatrix(table(knn_test$Obese_Class,knn_test$ObesePred))
+
+# knn.20 seems be the sweet spot but not by much
+
+```
+
+knn.20 seems be the sweet spot but not by much
