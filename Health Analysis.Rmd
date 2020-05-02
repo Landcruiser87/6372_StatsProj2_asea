@@ -25,7 +25,7 @@ library(tree)
 library(ISLR)
 library(randomForest)
 # parallel processing
-library(parallel)
+#library(parallel)
 library(doParallel)
 ```
 
